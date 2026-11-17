@@ -18,6 +18,8 @@ if (!PASSWORD || PASSWORD.length < 8) {
 }
 
 fs.mkdirSync(DATA_DIR, { recursive: true });
+const BLOB_DIR = path.join(DATA_DIR, 'blobs');
+fs.mkdirSync(BLOB_DIR, { recursive: true });
 const db = new DatabaseSync(path.join(DATA_DIR, 'apuntes.db'));
 db.exec(`
   PRAGMA journal_mode = WAL;
@@ -75,6 +77,19 @@ function readBody(req) {
       try { resolve(chunks.length ? JSON.parse(Buffer.concat(chunks).toString('utf8')) : {}); }
       catch (e) { reject(e); }
     });
+    req.on('error', reject);
+  });
+}
+
+function readRaw(req) {
+  return new Promise((resolve, reject) => {
+    let size = 0; const chunks = [];
+    req.on('data', (c) => {
+      size += c.length;
+      if (size > MAX_BODY) { reject(new Error('too large')); req.destroy(); return; }
+      chunks.push(c);
+    });
+    req.on('end', () => resolve(Buffer.concat(chunks)));
     req.on('error', reject);
   });
 }
@@ -144,6 +159,22 @@ async function api(req, res, url) {
     const recs = rows.slice(0, limit).map(rowToRec);
     const last = recs.length ? recs[recs.length - 1].seq : since;
     return send(res, 200, { records: recs, last, more });
+  }
+
+  const blob = p.match(/^\/api\/blob\/([a-z0-9]{10,40})$/);
+  if (blob) {
+    const file = path.join(BLOB_DIR, blob[1]);
+    if (req.method === 'PUT') {
+      const data = await readRaw(req);
+      fs.writeFileSync(file + '.tmp', data);
+      fs.renameSync(file + '.tmp', file);
+      return send(res, 200, { ok: true, size: data.length });
+    }
+    if (req.method === 'GET') {
+      if (!fs.existsSync(file)) return send(res, 404, { error: 'No encontrado' });
+      res.writeHead(200, { 'Content-Type': 'application/octet-stream', 'Cache-Control': 'private, max-age=31536000, immutable' });
+      return fs.createReadStream(file).pipe(res);
+    }
   }
 
   if (p === '/api/export' && req.method === 'GET') {

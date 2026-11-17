@@ -1,4 +1,6 @@
+import 'dart:convert';
 import 'dart:math';
+import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
 import 'package:sembast/sembast.dart';
@@ -65,6 +67,8 @@ class Store extends ChangeNotifier {
   final _recs = stringMapStoreFactory.store('recs');
   final _dirty = StoreRef<String, int>('dirty');
   final _meta = StoreRef<String, Object>('meta');
+  final _blobs = StoreRef<String, String>('blobs');
+  final _blobPending = StoreRef<String, int>('blobPending');
 
   final Map<String, Rec> recs = {};
   final Map<String, Map<String, Rec>> _byParent = {};
@@ -140,7 +144,28 @@ class Store extends ChangeNotifier {
     });
   }
 
+  // ---------- Archivos (imágenes) ----------
+
+  Future<void> putBlob(String id, Uint8List bytes, {bool pending = true}) async {
+    await _db.transaction((txn) async {
+      await _blobs.record(id).put(txn, base64Encode(bytes));
+      if (pending) await _blobPending.record(id).put(txn, 1);
+    });
+    if (pending) onLocalChange?.call();
+  }
+
+  Future<Uint8List?> getBlob(String id) async {
+    final s = await _blobs.record(id).get(_db);
+    return s == null ? null : base64Decode(s);
+  }
+
+  Future<List<String>> pendingBlobs() => _blobPending.findKeys(_db);
+
+  Future<void> blobUploaded(String id) => _blobPending.record(id).delete(_db);
+
   Future<void> clearAll() async {
+    await _blobs.delete(_db);
+    await _blobPending.delete(_db);
     await _recs.delete(_db);
     await _dirty.delete(_db);
     await _meta.record('seq').delete(_db);

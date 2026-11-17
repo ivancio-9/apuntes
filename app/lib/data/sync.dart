@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
@@ -119,6 +120,7 @@ class SyncService extends ChangeNotifier {
     try {
       do {
         _again = false;
+        await _pushBlobs();
         await _push();
         await _pull();
       } while (_again);
@@ -138,6 +140,37 @@ class SyncService extends ChangeNotifier {
   void _check(http.Response res) {
     if (res.statusCode == 401) throw AuthException('Sesión caducada');
     if (res.statusCode != 200) throw Exception('HTTP ${res.statusCode}');
+  }
+
+  Future<void> _pushBlobs() async {
+    for (final id in await store.pendingBlobs()) {
+      final bytes = await store.getBlob(id);
+      if (bytes == null) {
+        await store.blobUploaded(id);
+        continue;
+      }
+      final res = await http
+          .put(Uri.parse('$serverUrl/api/blob/$id'),
+              headers: {'Authorization': 'Bearer $token', 'Content-Type': 'application/octet-stream'}, body: bytes)
+          .timeout(const Duration(minutes: 2));
+      _check(res);
+      await store.blobUploaded(id);
+    }
+  }
+
+  /// Descarga una imagen que no está en este dispositivo.
+  Future<Uint8List?> fetchBlob(String id) async {
+    if (!loggedIn) return null;
+    try {
+      final res = await http
+          .get(Uri.parse('$serverUrl/api/blob/$id'), headers: {'Authorization': 'Bearer $token'})
+          .timeout(const Duration(minutes: 2));
+      if (res.statusCode != 200) return null;
+      await store.putBlob(id, res.bodyBytes, pending: false);
+      return res.bodyBytes;
+    } catch (_) {
+      return null;
+    }
   }
 
   Future<void> _push() async {

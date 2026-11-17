@@ -13,7 +13,8 @@ Future<void> main() async {
   await store.init();
   final sync = SyncService(store);
   await sync.load();
-  final settings = EditorSettings()..fingerDraws = (await store.getMeta('fingerDraws')) == true;
+  final settings = EditorSettings();
+  await settings.load(store);
   if (sync.loggedIn) {
     sync.start();
     sync.syncNow();
