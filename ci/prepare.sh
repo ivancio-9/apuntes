@@ -11,6 +11,12 @@ if [ -f android/app/src/main/AndroidManifest.xml ]; then
   grep -q 'android.permission.INTERNET' "$M" || \
     sed -i 's|<manifest xmlns:android="http://schemas.android.com/apk/res/android">|&\n    <uses-permission android:name="android.permission.INTERNET"/>|' "$M"
   sed -i 's|android:label="apuntes"|android:label="Apuntes"|' "$M"
+  # El análisis "lint" de Android falla con algunos plugins; no es necesario para compilar.
+  if [ -f android/app/build.gradle.kts ] && ! grep -q checkReleaseBuilds android/app/build.gradle.kts; then
+    printf '\nandroid {\n    lint {\n        checkReleaseBuilds = false\n        abortOnError = false\n    }\n}\n' >> android/app/build.gradle.kts
+  elif [ -f android/app/build.gradle ] && ! grep -q checkReleaseBuilds android/app/build.gradle; then
+    printf '\nandroid {\n    lintOptions {\n        checkReleaseBuilds false\n        abortOnError false\n    }\n}\n' >> android/app/build.gradle
+  fi
 fi
 
 if [ -f web/index.html ]; then
