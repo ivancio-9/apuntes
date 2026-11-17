@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <base href="$FLUTTER_BASE_HREF">
+  <meta charset="UTF-8">
+  <meta content="IE=Edge" http-equiv="X-UA-Compatible">
+  <meta name="description" content="Apuntes a mano y con teclado.">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Apuntes">
+  <link rel="apple-touch-icon" href="icons/Icon-192.png">
+  <link rel="icon" type="image/png" href="favicon.png"/>
+  <title>Apuntes</title>
+  <link rel="manifest" href="manifest.json">
+  <style>html, body { overscroll-behavior: none; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }</style>
+  <script>
+    // iPad: la función "Escritura a mano" (Scribble) de iPadOS se queda con parte de los
+    // eventos del Apple Pencil y se pierden trazos. Cancelar los eventos táctiles del lápiz
+    // lo evita (los eventos de puntero que usa la app siguen llegando).
+    (function () {
+      function stylus(e) {
+        var t = e.changedTouches;
+        if (!t) return false;
+        for (var i = 0; i < t.length; i++) { if (t[i].touchType === 'stylus') return true; }
+        return false;
+      }
+      function block(e) {
+        // No bloquear si se está escribiendo en un campo de texto.
+        var a = document.activeElement;
+        if (a && (a.tagName === 'INPUT' || a.tagName === 'TEXTAREA') && e.target === a) return;
+        if (stylus(e)) e.preventDefault();
+      }
+      ['touchstart', 'touchmove', 'touchend'].forEach(function (n) {
+        document.addEventListener(n, block, { passive: false, capture: true });
+      });
+    })();
+
+    // Pegar imágenes (Ctrl+V / Cmd+V) desde el portapapeles.
+    window.addEventListener('paste', function (e) {
+      var items = e.clipboardData && e.clipboardData.items;
+      if (!items || !window.apuntesOnImagePaste) return;
+      for (var i = 0; i < items.length; i++) {
+        var it = items[i];
+        if (it.kind === 'file' && it.type.indexOf('image/') === 0) {
+          var f = it.getAsFile();
+          if (!f) continue;
+          e.preventDefault();
+          f.arrayBuffer().then(function (buf) { window.apuntesOnImagePaste(new Uint8Array(buf)); });
+          return;
+        }
+      }
+    }, true);
+
+    // Leer una imagen del portapapeles al pulsar el botón "Pegar".
+    window.apuntesReadClipboardImage = async function () {
+      if (!navigator.clipboard || !navigator.clipboard.read) return null;
+      try {
+        var items = await navigator.clipboard.read();
+        for (var i = 0; i < items.length; i++) {
+          for (var j = 0; j < items[i].types.length; j++) {
+            var type = items[i].types[j];
+            if (type.indexOf('image/') === 0) {
+              var blob = await items[i].getType(type);
+              return new Uint8Array(await blob.arrayBuffer());
+            }
+          }
+        }
+      } catch (err) { console.log('portapapeles:', err); }
+      return null;
+    };
+  </script>
+</head>
+<body>
+  <script src="flutter_bootstrap.js" async></script>
+</body>
+</html>

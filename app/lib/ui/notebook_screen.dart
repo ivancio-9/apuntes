@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
@@ -5,6 +7,7 @@ import 'package:image_picker/image_picker.dart';
 import '../app_scope.dart';
 import '../data/store.dart';
 import '../ink/ink.dart';
+import '../platform/clipboard_stub.dart' if (dart.library.js_interop) '../platform/clipboard_web.dart';
 import 'color_picker.dart';
 import 'editor_state.dart';
 import 'page_editor.dart';
@@ -16,20 +19,70 @@ const kPapers = {
   'dots': 'Puntos',
 };
 
-const _shapeIcons = {
-  ShapeKind.line: Icons.horizontal_rule,
-  ShapeKind.arrow: Icons.arrow_right_alt,
-  ShapeKind.rect: Icons.crop_square,
-  ShapeKind.ellipse: Icons.circle_outlined,
-  ShapeKind.triangle: Icons.change_history,
-};
 const _shapeNames = {
   ShapeKind.line: 'Línea',
   ShapeKind.arrow: 'Flecha',
   ShapeKind.rect: 'Rectángulo',
-  ShapeKind.ellipse: 'Círculo / elipse',
+  ShapeKind.ellipse: 'Círculo',
   ShapeKind.triangle: 'Triángulo',
 };
+
+/// Dibujo pequeño de cada figura (para los botones).
+class ShapeGlyph extends StatelessWidget {
+  final ShapeKind kind;
+  final Color color;
+  final Size size;
+  const ShapeGlyph({super.key, required this.kind, required this.color, required this.size});
+
+  @override
+  Widget build(BuildContext context) => CustomPaint(size: size, painter: _GlyphPainter(kind, color));
+}
+
+class _GlyphPainter extends CustomPainter {
+  final ShapeKind kind;
+  final Color color;
+  _GlyphPainter(this.kind, this.color);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final p = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round;
+    final r = Rect.fromLTWH(2, 2, size.width - 4, size.height - 4);
+    switch (kind) {
+      case ShapeKind.line:
+        canvas.drawLine(r.bottomLeft, r.topRight, p);
+        break;
+      case ShapeKind.arrow:
+        final a = Offset(r.left, r.center.dy), b = Offset(r.right, r.center.dy);
+        canvas.drawLine(a, b, p);
+        canvas.drawLine(b, b + const Offset(-6, -5), p);
+        canvas.drawLine(b, b + const Offset(-6, 5), p);
+        break;
+      case ShapeKind.rect:
+        canvas.drawRect(r, p);
+        break;
+      case ShapeKind.ellipse:
+        canvas.drawOval(r, p);
+        break;
+      case ShapeKind.triangle:
+        canvas.drawPath(
+            Path()
+              ..moveTo(r.left, r.bottom)
+              ..lineTo(r.center.dx, r.top)
+              ..lineTo(r.right, r.bottom)
+              ..close(),
+            p);
+        break;
+    }
+  }
+
+  @override
+  bool shouldRepaint(_GlyphPainter old) => old.kind != kind || old.color != color;
+}
 
 const _kAccent = Color(0xFF2F6FED);
 const _kBarBg = Color(0xFFF7F8FA);
@@ -60,10 +113,13 @@ class _NotebookScreenState extends State<NotebookScreen> {
     final pages = store.pages(widget.notebookId);
     final last = store.recs[widget.notebookId]?.data['lastPage'] as String?;
     _pageId = pages.any((p) => p.id == last) ? last : (pages.isEmpty ? null : pages.first.id);
+    // Ctrl+V / Cmd+V con una captura en el portapapeles la inserta en la página.
+    listenForPastedImages((bytes) => _insertBytes(bytes));
   }
 
   @override
   void dispose() {
+    listenForPastedImages(null);
     store.removeListener(_changed);
     settings.removeListener(_changed);
     history.removeListener(_changed);
@@ -133,6 +189,29 @@ class _NotebookScreenState extends State<NotebookScreen> {
     if (v != null) await store.updateData(nb, {'paper': v});
   }
 
+  Future<void> _insertBytes(Uint8List bytes) async {
+    try {
+      await _editorKey.currentState?.insertImage(bytes);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('No se pudo insertar la imagen: $e')));
+      }
+    }
+  }
+
+  Future<void> _pasteImage() async {
+    final bytes = await readClipboardImage();
+    if (bytes == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('No hay ninguna imagen en el portapapeles. En el ordenador también puedes pulsar Ctrl+V.'),
+        ));
+      }
+      return;
+    }
+    await _insertBytes(bytes);
+  }
+
   Future<void> _pickImage() async {
     try {
       final x = await ImagePicker().pickImage(
@@ -195,7 +274,7 @@ class _NotebookScreenState extends State<NotebookScreen> {
 
   // ---------- Barra superior ----------
 
-  Widget _toolButton(Tool t, IconData icon, String tip, {Color? dot}) {
+  Widget _toolButton(Tool t, IconData icon, String tip, {Color? dot, Widget? glyph}) {
     final sel = settings.tool == t;
     return Tooltip(
       message: tip,
@@ -212,7 +291,7 @@ class _NotebookScreenState extends State<NotebookScreen> {
             boxShadow: sel ? const [BoxShadow(color: Color(0x22000000), blurRadius: 4, offset: Offset(0, 1))] : null,
           ),
           child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-            Icon(icon, size: 21, color: sel ? _kAccent : const Color(0xFF4A4F57)),
+            glyph ?? Icon(icon, size: 21, color: sel ? _kAccent : const Color(0xFF4A4F57)),
             if (dot != null)
               Container(
                 margin: const EdgeInsets.only(top: 2),
@@ -235,18 +314,40 @@ class _NotebookScreenState extends State<NotebookScreen> {
         _toolButton(Tool.pen, Icons.edit, 'Pluma', dot: settings.penColor),
         _toolButton(Tool.highlighter, Icons.border_color, 'Subrayador', dot: settings.highlighterBase),
         _toolButton(Tool.eraser, Icons.cleaning_services_outlined, 'Borrador'),
-        _toolButton(Tool.shape, Icons.category_outlined, 'Figuras', dot: settings.shapeColor),
+        _toolButton(Tool.shape, Icons.category_outlined, 'Figuras (línea, flecha, rectángulo, círculo, triángulo)',
+            dot: settings.shapeColor,
+            glyph: ShapeGlyph(
+                kind: settings.shape,
+                color: settings.tool == Tool.shape ? _kAccent : const Color(0xFF4A4F57),
+                size: const Size(22, 18))),
         _toolButton(Tool.text, Icons.text_fields, 'Texto con teclado', dot: settings.textColor),
         Container(width: 1, height: 24, margin: const EdgeInsets.symmetric(horizontal: 4), color: Colors.black12),
-        Tooltip(
-          message: 'Insertar imagen o captura',
-          child: GestureDetector(
-            onTap: _pickImage,
-            child: const SizedBox(
-              width: 44,
-              height: 40,
-              child: Icon(Icons.add_photo_alternate_outlined, size: 22, color: Color(0xFF4A4F57)),
+        PopupMenuButton<String>(
+          tooltip: 'Insertar imagen o captura',
+          onSelected: (v) => v == 'paste' ? _pasteImage() : _pickImage(),
+          itemBuilder: (c) => [
+            const PopupMenuItem(
+              value: 'pick',
+              child: ListTile(
+                leading: Icon(Icons.photo_library_outlined),
+                title: Text('Desde fotos o archivos'),
+                contentPadding: EdgeInsets.zero,
+              ),
             ),
+            if (clipboardImagesSupported)
+              const PopupMenuItem(
+                value: 'paste',
+                child: ListTile(
+                  leading: Icon(Icons.content_paste),
+                  title: Text('Pegar captura (o Ctrl+V)'),
+                  contentPadding: EdgeInsets.zero,
+                ),
+              ),
+          ],
+          child: const SizedBox(
+            width: 44,
+            height: 40,
+            child: Icon(Icons.add_photo_alternate_outlined, size: 22, color: Color(0xFF4A4F57)),
           ),
         ),
       ]),
@@ -432,6 +533,28 @@ class _SubToolbar extends StatelessWidget {
           ),
         ),
       );
+
+  Widget _shapeButton(ShapeKind k) {
+    final on = settings.shape == k;
+    final color = on ? _kAccent : const Color(0xFF4A4F57);
+    return InkWell(
+      borderRadius: BorderRadius.circular(8),
+      onTap: () => settings.set(() => settings.shape = k),
+      child: Container(
+        width: 58,
+        padding: const EdgeInsets.symmetric(vertical: 3),
+        decoration: BoxDecoration(
+          color: on ? _kAccent.withValues(alpha: 0.12) : null,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          ShapeGlyph(kind: k, color: color, size: const Size(26, 18)),
+          const SizedBox(height: 2),
+          Text(_shapeNames[k]!, style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w600, color: color)),
+        ]),
+      ),
+    );
+  }
 
   Widget _chip(String label, bool on, VoidCallback onTap) => InkWell(
         borderRadius: BorderRadius.circular(8),
@@ -631,8 +754,7 @@ class _SubToolbar extends StatelessWidget {
         break;
       case Tool.shape:
         children.addAll([
-          for (final k in ShapeKind.values)
-            _toggle(_shapeIcons[k]!, _shapeNames[k]!, settings.shape == k, () => settings.set(() => settings.shape = k)),
+          for (final k in ShapeKind.values) _shapeButton(k),
           _divider(),
           _toggle(Icons.format_color_fill, 'Relleno', settings.shapeFill,
               () => settings.set(() => settings.shapeFill = !settings.shapeFill)),
