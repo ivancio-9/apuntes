@@ -1049,7 +1049,7 @@ class PageEditorState extends State<PageEditor> {
   Widget _selectionBar() {
     final r = _selScreenRect()!;
     final top = r.top > 70 ? r.top - 58 : r.bottom + 12;
-    final left = (r.center.dx - 110).clamp(8.0, math.max(8.0, _viewport.width - 228));
+    final double left = (r.center.dx - 110).clamp(8.0, math.max(8.0, _viewport.width - 228)).toDouble();
     Widget btn(IconData icon, String tip, VoidCallback onTap) => IconButton(
           tooltip: tip,
           icon: Icon(icon, size: 22),
