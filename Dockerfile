@@ -4,7 +4,7 @@ WORKDIR /src
 COPY app/ app/
 COPY ci/ ci/
 RUN bash ci/prepare.sh web \
- && cd app && flutter build web --release --no-web-resources-cdn
+ && cd app && flutter build web --release --no-web-resources-cdn --no-tree-shake-icons
 
 # 2) Servidor ligero que sirve la web y sincroniza los apuntes
 FROM node:22-slim

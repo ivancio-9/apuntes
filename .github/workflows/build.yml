@@ -50,7 +50,7 @@ jobs:
         run: bash ci/prepare.sh android
       - name: Compilar APK
         working-directory: app
-        run: flutter build apk --release
+        run: flutter build apk --release --no-tree-shake-icons
       - name: Publicar APK
         uses: softprops/action-gh-release@v2
         with:

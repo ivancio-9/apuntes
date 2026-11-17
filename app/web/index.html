@@ -69,6 +69,29 @@
       } catch (err) { console.log('portapapeles:', err); }
       return null;
     };
+
+    // Descargar un archivo generado por la app (PDF, JPG, PNG, ZIP).
+    window.apuntesDownload = function (bytes, name, mime) {
+      var blob = new Blob([bytes], { type: mime });
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement('a');
+      a.href = url; a.download = name; a.style.display = 'none';
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(function () { URL.revokeObjectURL(url); a.remove(); }, 10000);
+    };
+
+    // Convertir PNG a JPG usando el propio navegador (rápido).
+    window.apuntesPngToJpg = async function (bytes, quality) {
+      var bmp = await createImageBitmap(new Blob([bytes], { type: 'image/png' }));
+      var c = document.createElement('canvas');
+      c.width = bmp.width; c.height = bmp.height;
+      var ctx = c.getContext('2d');
+      ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, c.width, c.height);
+      ctx.drawImage(bmp, 0, 0);
+      var out = await new Promise(function (r) { c.toBlob(r, 'image/jpeg', quality); });
+      return new Uint8Array(await out.arrayBuffer());
+    };
   </script>
 </head>
 <body>

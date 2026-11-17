@@ -10,6 +10,7 @@ import '../ink/ink.dart';
 import '../platform/clipboard_stub.dart' if (dart.library.js_interop) '../platform/clipboard_web.dart';
 import 'color_picker.dart';
 import 'editor_state.dart';
+import 'export.dart';
 import 'page_editor.dart';
 
 const kPapers = {
@@ -328,20 +329,20 @@ class _NotebookScreenState extends State<NotebookScreen> {
           itemBuilder: (c) => [
             const PopupMenuItem(
               value: 'pick',
-              child: ListTile(
-                leading: Icon(Icons.photo_library_outlined),
-                title: Text('Desde fotos o archivos'),
-                contentPadding: EdgeInsets.zero,
-              ),
+              child: Row(children: [
+                Icon(Icons.photo_library_outlined),
+                SizedBox(width: 12),
+                Text('Desde fotos o archivos'),
+              ]),
             ),
             if (clipboardImagesSupported)
               const PopupMenuItem(
                 value: 'paste',
-                child: ListTile(
-                  leading: Icon(Icons.content_paste),
-                  title: Text('Pegar captura (o Ctrl+V)'),
-                  contentPadding: EdgeInsets.zero,
-                ),
+                child: Row(children: [
+                  Icon(Icons.content_paste),
+                  SizedBox(width: 12),
+                  Text('Pegar captura (o Ctrl+V)'),
+                ]),
               ),
           ],
           child: const SizedBox(
@@ -363,7 +364,20 @@ class _NotebookScreenState extends State<NotebookScreen> {
       );
 
   Widget _leftGroup(Rec nb) => Row(mainAxisSize: MainAxisSize.min, children: [
-        _iconBtn(Icons.arrow_back_ios_new, 'Volver a la biblioteca', () => Navigator.pop(context)),
+        Padding(
+          padding: const EdgeInsets.only(left: 4, right: 6),
+          child: TextButton.icon(
+            onPressed: () => Navigator.pop(context),
+            style: TextButton.styleFrom(
+              foregroundColor: _kAccent,
+              backgroundColor: _kAccent.withValues(alpha: 0.08),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+            icon: const Icon(Icons.chevron_left, size: 20),
+            label: const Text('Cuadernos', style: TextStyle(fontWeight: FontWeight.w600)),
+          ),
+        ),
         Flexible(
           child: Text(
             (nb.data['title'] ?? '') as String,
@@ -409,6 +423,8 @@ class _NotebookScreenState extends State<NotebookScreen> {
         ]),
       ),
       _iconBtn(Icons.note_add_outlined, 'Añadir página al final', () => _addPage(null)),
+      _iconBtn(Icons.ios_share, 'Exportar a PDF, JPG o PNG',
+          () => showExportDialog(context, widget.app, nb, currentPage: page)),
       PopupMenuButton<String>(
         tooltip: 'Más opciones',
         icon: const Icon(Icons.more_horiz, color: Color(0xFF4A4F57)),
@@ -416,6 +432,9 @@ class _NotebookScreenState extends State<NotebookScreen> {
           switch (v) {
             case 'paper':
               _choosePaper(nb);
+              break;
+            case 'export':
+              showExportDialog(context, widget.app, nb, currentPage: page);
               break;
             case 'finger':
               settings.set(() => settings.fingerDraws = !settings.fingerDraws);
@@ -429,6 +448,7 @@ class _NotebookScreenState extends State<NotebookScreen> {
           }
         },
         itemBuilder: (c) => [
+          const PopupMenuItem(value: 'export', child: Text('Exportar (PDF, JPG, PNG)…')),
           const PopupMenuItem(value: 'paper', child: Text('Tipo de papel…')),
           CheckedPopupMenuItem(value: 'finger', checked: settings.fingerDraws, child: const Text('Dibujar con el dedo')),
           const PopupMenuDivider(),
@@ -517,22 +537,29 @@ class _SubToolbar extends StatelessWidget {
   Widget _divider() =>
       Container(width: 1, height: 22, margin: const EdgeInsets.symmetric(horizontal: 8), color: Colors.black12);
 
-  Widget _toggle(IconData icon, String tip, bool on, VoidCallback onTap) => Tooltip(
-        message: tip,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(8),
-          onTap: onTap,
-          child: Container(
-            width: 36,
-            height: 34,
-            decoration: BoxDecoration(
-              color: on ? _kAccent.withValues(alpha: 0.12) : null,
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Icon(icon, size: 20, color: on ? _kAccent : const Color(0xFF4A4F57)),
+  Widget _toggle(IconData icon, String tip, bool on, VoidCallback onTap, {String? label}) {
+    final color = on ? _kAccent : const Color(0xFF4A4F57);
+    return Tooltip(
+      message: tip,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(8),
+        onTap: onTap,
+        child: Container(
+          constraints: BoxConstraints(minWidth: label == null ? 36 : 52, minHeight: 34),
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
+          decoration: BoxDecoration(
+            color: on ? _kAccent.withValues(alpha: 0.12) : null,
+            borderRadius: BorderRadius.circular(8),
           ),
+          child: Column(mainAxisSize: MainAxisSize.min, mainAxisAlignment: MainAxisAlignment.center, children: [
+            Icon(icon, size: 20, color: color),
+            if (label != null)
+              Text(label, style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w600, color: color)),
+          ]),
         ),
-      );
+      ),
+    );
+  }
 
   Widget _shapeButton(ShapeKind k) {
     final on = settings.shape == k;
@@ -733,8 +760,9 @@ class _SubToolbar extends StatelessWidget {
             _width(7.0 + i * 5, settings.highlighterWidth == EditorSettings.highlighterWidths[i],
                 () => settings.set(() => settings.highlighterWidth = EditorSettings.highlighterWidths[i])),
           _divider(),
-          _toggle(Icons.straighten, 'Línea recta', settings.highlighterStraight,
-              () => settings.set(() => settings.highlighterStraight = !settings.highlighterStraight)),
+          _chip('Recto', settings.highlighterStraight, () => settings.set(() => settings.highlighterStraight = true)),
+          _chip('A mano alzada', !settings.highlighterStraight,
+              () => settings.set(() => settings.highlighterStraight = false)),
           _divider(),
           _swatches(context),
         ]);
@@ -757,7 +785,8 @@ class _SubToolbar extends StatelessWidget {
           for (final k in ShapeKind.values) _shapeButton(k),
           _divider(),
           _toggle(Icons.format_color_fill, 'Relleno', settings.shapeFill,
-              () => settings.set(() => settings.shapeFill = !settings.shapeFill)),
+              () => settings.set(() => settings.shapeFill = !settings.shapeFill),
+              label: 'Relleno'),
           for (var i = 0; i < EditorSettings.shapeWidths.length; i++)
             _width(4.0 + i * 4, settings.shapeWidth == EditorSettings.shapeWidths[i],
                 () => settings.set(() => settings.shapeWidth = EditorSettings.shapeWidths[i])),
@@ -779,9 +808,11 @@ class _SubToolbar extends StatelessWidget {
           _toggle(Icons.add, 'Más grande', false,
               () => settings.set(() => settings.textSize = (settings.textSize + 2).clamp(10.0, 120.0))),
           _divider(),
-          _toggle(Icons.format_bold, 'Negrita', settings.bold, () => settings.set(() => settings.bold = !settings.bold)),
+          _toggle(Icons.format_bold, 'Negrita', settings.bold, () => settings.set(() => settings.bold = !settings.bold),
+              label: 'Negrita'),
           _toggle(Icons.format_italic, 'Cursiva', settings.italic,
-              () => settings.set(() => settings.italic = !settings.italic)),
+              () => settings.set(() => settings.italic = !settings.italic),
+              label: 'Cursiva'),
           _divider(),
           _swatches(context),
         ]);
