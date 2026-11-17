@@ -1,0 +1,14 @@
+# Copia este archivo a una carpeta de tu ordenador (por ejemplo "apuntes-servidor"),
+# cambia USUARIO por tu usuario de GitHub (en minúsculas) y la contraseña.
+services:
+  apuntes:
+    image: ghcr.io/USUARIO/apuntes:latest
+    restart: unless-stopped
+    ports:
+      # Solo accesible desde este ordenador; Tailscale se encarga de llevarlo a tu iPad.
+      - "127.0.0.1:8080:8080"
+    environment:
+      APP_PASSWORD: "cambia-esta-contraseña"
+    volumes:
+      # Aquí se guardan todos tus apuntes. Haz copia de esta carpeta de vez en cuando.
+      - ./datos:/data

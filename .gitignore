@@ -1,0 +1,15 @@
+server/data/
+datos/
+app/build/
+app/.dart_tool/
+app/android/
+app/ios/
+app/linux/
+app/macos/
+app/windows/
+app/test/
+app/.metadata
+app/pubspec.lock
+app/analysis_options.yaml
+app/web/*
+!app/web/manifest.json
