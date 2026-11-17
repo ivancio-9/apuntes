@@ -1,14 +1,17 @@
-# Copia este archivo a una carpeta de tu ordenador (por ejemplo "apuntes-servidor"),
-# cambia USUARIO por tu usuario de GitHub (en minúsculas) y la contraseña.
+# Stack para Portainer: Stacks → Add stack → Web editor → pega esto.
+# Cambia solo la contraseña.
 services:
   apuntes:
-    image: ghcr.io/USUARIO/apuntes:latest
+    image: ghcr.io/ivancio-9/apuntes:latest
     restart: unless-stopped
     ports:
-      # Solo accesible desde este ordenador; Tailscale se encarga de llevarlo a tu iPad.
+      # Solo accesible desde este ordenador; Tailscale lo lleva de forma segura a tu iPad.
       - "127.0.0.1:8080:8080"
     environment:
       APP_PASSWORD: "cambia-esta-contraseña"
     volumes:
-      # Aquí se guardan todos tus apuntes. Haz copia de esta carpeta de vez en cuando.
-      - ./datos:/data
+      # Aquí se guardan todos tus apuntes.
+      - apuntes-datos:/data
+
+volumes:
+  apuntes-datos:
