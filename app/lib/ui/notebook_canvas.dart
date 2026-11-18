@@ -343,7 +343,7 @@ class NotebookCanvasState extends State<NotebookCanvas> with SingleTickerProvide
   Offset _toScreen(Offset global) => global * _scale + _pan;
 
   int _pageAtGlobalY(double gy) =>
-      ((gy - kTopPad + kGap / 2) / (kPageH + kGap)).floor().clamp(0, math.max(0, pages.length - 1));
+      ((gy - kTopPad + kGap / 2) / (kPageH + kGap)).floor().clamp(0, math.max(0, pages.length - 1)).toInt();
 
   int get currentPage {
     if (pages.isEmpty || _viewport.height == 0) return 0;
@@ -353,7 +353,7 @@ class NotebookCanvasState extends State<NotebookCanvas> with SingleTickerProvide
   void _fit(Size size) {
     final s = math.min((size.width - 32) / kPageW, 1.6);
     _scale = s <= 0 ? 0.5 : s;
-    final i = widget.initialPage.clamp(0, math.max(0, pages.length - 1));
+    final int i = widget.initialPage.clamp(0, math.max(0, pages.length - 1)).toInt();
     _pan = Offset((size.width - kPageW * _scale) / 2, 16 - pageTop(i) * _scale);
     _fitted = true;
   }
@@ -378,7 +378,7 @@ class NotebookCanvasState extends State<NotebookCanvas> with SingleTickerProvide
 
   void goToPage(int i) {
     if (pages.isEmpty) return;
-    i = i.clamp(0, pages.length - 1);
+    i = i.clamp(0, pages.length - 1).toInt();
     setState(() {
       _pan = Offset(_pan.dx, 16 - pageTop(i) * _scale);
       _clampPan();

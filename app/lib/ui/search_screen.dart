@@ -67,8 +67,8 @@ class _SearchScreenState extends State<SearchScreen> {
           final text = (el.data['text'] ?? '') as String;
           final pos = _norm(text).indexOf(n);
           if (pos < 0) continue;
-          final start = (pos - 40).clamp(0, text.length);
-          final end = (pos + n.length + 60).clamp(0, text.length);
+          final start = (pos - 40).clamp(0, text.length).toInt();
+          final end = (pos + n.length + 60).clamp(0, text.length).toInt();
           hits.add(_Hit(nb, pages[i], i + 1,
               '${start > 0 ? '…' : ''}${text.substring(start, end).replaceAll('\n', ' ')}${end < text.length ? '…' : ''}'));
           if (hits.length > 200) break;

@@ -149,7 +149,7 @@ class _NotebookScreenState extends State<NotebookScreen> {
     history.addListener(_changed);
     final pages = store.pages(widget.notebookId);
     final want = widget.initialPageId ?? store.recs[widget.notebookId]?.data['lastPage'] as String?;
-    _initialPage = want == null ? 0 : pages.indexWhere((p) => p.id == want).clamp(0, 1 << 30);
+    _initialPage = want == null ? 0 : pages.indexWhere((p) => p.id == want).clamp(0, 1 << 30).toInt();
     if (_initialPage >= pages.length) _initialPage = 0;
     _page = _initialPage;
     listenForPastedImages((bytes) => _insertBytes(bytes));
@@ -174,7 +174,7 @@ class _NotebookScreenState extends State<NotebookScreen> {
   List<Rec> get _pages => store.pages(widget.notebookId);
   Rec? get _currentPage {
     final ps = _pages;
-    return ps.isEmpty ? null : ps[_page.clamp(0, ps.length - 1)];
+    return ps.isEmpty ? null : ps[_page.clamp(0, ps.length - 1).toInt()];
   }
 
   void _onPageChanged(int i) {
