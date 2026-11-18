@@ -284,7 +284,7 @@ class Stroke {
   final double width;
   final Float32List pts; // x, y, presión (0..1), repetido
   late final Rect bounds = _bounds();
-  late final Path path = buildStrokePath(pts, width, pressure: tool == kToolPen);
+  late final Path path = buildStrokePath(densify(pts), width, pressure: tool == kToolPen);
 
   Stroke(this.tool, this.color, this.width, this.pts);
 
@@ -342,6 +342,51 @@ Float32List smoothPoints(List<double> raw) {
       out[i * 3 + k] = raw[(i - 1) * 3 + k] * 0.25 + raw[i * 3 + k] * 0.5 + raw[(i + 1) * 3 + k] * 0.25;
     }
   }
+  return out;
+}
+
+/// Añade puntos intermedios con una curva (Catmull-Rom) para que el trazo sea suave
+/// aunque el navegador entregue pocos puntos del lápiz.
+List<double> densify(List<double> pts) {
+  final n = pts.length ~/ 3;
+  if (n < 3) return pts;
+  final out = <double>[];
+  Offset p(int i) {
+    final k = i.clamp(0, n - 1).toInt();
+    return Offset(pts[k * 3], pts[k * 3 + 1]);
+  }
+
+  for (var i = 0; i < n - 1; i++) {
+    final p0 = p(i - 1), p1 = p(i), p2 = p(i + 1), p3 = p(i + 2);
+    final pr1 = pts[i * 3 + 2], pr2 = pts[(i + 1) * 3 + 2];
+    out
+      ..add(p1.dx)
+      ..add(p1.dy)
+      ..add(pr1);
+    final d = (p2 - p1).distance;
+    final steps = math.min(10, (d / 2.5).floor());
+    for (var k = 1; k < steps; k++) {
+      final t = k / steps, t2 = t * t, t3 = t2 * t;
+      final x = 0.5 *
+          (2 * p1.dx +
+              (-p0.dx + p2.dx) * t +
+              (2 * p0.dx - 5 * p1.dx + 4 * p2.dx - p3.dx) * t2 +
+              (-p0.dx + 3 * p1.dx - 3 * p2.dx + p3.dx) * t3);
+      final y = 0.5 *
+          (2 * p1.dy +
+              (-p0.dy + p2.dy) * t +
+              (2 * p0.dy - 5 * p1.dy + 4 * p2.dy - p3.dy) * t2 +
+              (-p0.dy + 3 * p1.dy - 3 * p2.dy + p3.dy) * t3);
+      out
+        ..add(x)
+        ..add(y)
+        ..add(pr1 + (pr2 - pr1) * t);
+    }
+  }
+  out
+    ..add(pts[(n - 1) * 3])
+    ..add(pts[(n - 1) * 3 + 1])
+    ..add(pts[(n - 1) * 3 + 2]);
   return out;
 }
 

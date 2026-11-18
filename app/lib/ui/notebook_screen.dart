@@ -38,7 +38,10 @@ const _tapeNames = {
 
 const kAccent = Color(0xFF2F6FED);
 const _kInk = Color(0xFF3A3F47);
-const _kBarBg = Color(0xFFF7F8FA);
+const _kBarBg = Color(0xFF006DB2);
+const _kOnBar = Color(0xFFFFFFFF);
+const _kOnBarDim = Color(0xE6FFFFFF);
+const _kSelBg = Color(0x33FFFFFF);
 const _kPill = Color(0xFFECEEF2);
 
 /// Dibujo pequeño de cada figura (para los botones).
@@ -451,7 +454,7 @@ class _NotebookScreenState extends State<NotebookScreen> {
         tooltip: tip,
         onPressed: onTap,
         icon: Icon(icon, size: 22),
-        color: active ? kAccent : _kInk,
+        color: active ? _kOnBar : _kOnBarDim,
         disabledColor: Colors.black26,
       );
 
@@ -465,7 +468,7 @@ class _NotebookScreenState extends State<NotebookScreen> {
         TextButton.icon(
           onPressed: () => Navigator.pop(context),
           style: TextButton.styleFrom(
-            foregroundColor: kAccent,
+            foregroundColor: _kOnBar,
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
           ),
           icon: const Icon(Icons.chevron_left, size: 24),
@@ -477,12 +480,12 @@ class _NotebookScreenState extends State<NotebookScreen> {
             (nb.data['title'] ?? '') as String,
             overflow: TextOverflow.ellipsis,
             textAlign: TextAlign.center,
-            style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15.5, color: Color(0xFF22262C)),
+            style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15.5, color: Color(0xFFFFFFFF)),
           ),
         ),
         _navButton(Icons.undo, 'Deshacer', history.canUndo ? history.undo : null),
         _navButton(Icons.redo, 'Rehacer', history.canRedo ? history.redo : null),
-        Container(width: 1, height: 22, margin: const EdgeInsets.symmetric(horizontal: 4), color: Colors.black12),
+        Container(width: 1, height: 22, margin: const EdgeInsets.symmetric(horizontal: 4), color: Color(0x40FFFFFF)),
         _navButton(Icons.grid_view_rounded, 'Ver todas las páginas', _openOverview),
         _navButton(bookmarked ? Icons.bookmark : Icons.bookmark_border, 'Marcador en esta página', _toggleBookmark,
             active: bookmarked),
@@ -491,7 +494,7 @@ class _NotebookScreenState extends State<NotebookScreen> {
             () => showExportDialog(context, widget.app, nb, currentPage: page)),
         PopupMenuButton<String>(
           tooltip: 'Más opciones',
-          icon: const Icon(Icons.more_horiz, color: _kInk),
+          icon: const Icon(Icons.more_horiz, color: _kOnBarDim),
           onSelected: (v) async {
             switch (v) {
               case 'paper':
@@ -548,11 +551,11 @@ class _NotebookScreenState extends State<NotebookScreen> {
           width: 42,
           height: 42,
           decoration: BoxDecoration(
-            color: sel ? kAccent.withValues(alpha: 0.12) : Colors.transparent,
+            color: sel ? _kSelBg : Colors.transparent,
             borderRadius: BorderRadius.circular(10),
           ),
           child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-            glyph ?? Icon(icon, size: 22, color: sel ? kAccent : _kInk),
+            glyph ?? Icon(icon, size: 22, color: sel ? _kOnBar : _kOnBarDim),
             if (dot != null)
               Container(
                 margin: const EdgeInsets.only(top: 3),
@@ -575,22 +578,22 @@ class _NotebookScreenState extends State<NotebookScreen> {
             width: 42,
             height: 42,
             decoration: BoxDecoration(
-              color: on ? kAccent.withValues(alpha: 0.12) : Colors.transparent,
+              color: on ? _kSelBg : Colors.transparent,
               borderRadius: BorderRadius.circular(10),
             ),
-            child: Icon(icon, size: 22, color: on ? kAccent : _kInk),
+            child: Icon(icon, size: 22, color: on ? _kOnBar : _kOnBarDim),
           ),
         ),
       );
 
-  Widget _sep() => Container(width: 1, height: 26, margin: const EdgeInsets.symmetric(horizontal: 6), color: Colors.black12);
+  Widget _sep() => Container(width: 1, height: 26, margin: const EdgeInsets.symmetric(horizontal: 6), color: Color(0x40FFFFFF));
 
   Widget _toolsBar() {
     return Container(
       height: 56,
       decoration: const BoxDecoration(
-        color: Colors.white,
-        border: Border(bottom: BorderSide(color: Color(0x14000000)), top: BorderSide(color: Color(0x0A000000))),
+        color: _kBarBg,
+        border: Border(bottom: BorderSide(color: Color(0x33000000)), top: BorderSide(color: Color(0x26FFFFFF))),
       ),
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
@@ -604,7 +607,7 @@ class _NotebookScreenState extends State<NotebookScreen> {
               dot: settings.shapeColor,
               glyph: ShapeGlyph(
                   kind: settings.shape,
-                  color: settings.tool == Tool.shape ? kAccent : _kInk,
+                  color: settings.tool == Tool.shape ? _kOnBar : _kOnBarDim,
                   size: const Size(22, 18))),
           _tool(Tool.tape, Icons.straighten, 'Washi tape (cinta)',
               glyph: _TapeGlyph(pattern: settings.tapePattern, color: settings.tapeColor)),
@@ -642,7 +645,7 @@ class _NotebookScreenState extends State<NotebookScreen> {
             child: const SizedBox(
               width: 42,
               height: 42,
-              child: Icon(Icons.add_photo_alternate_outlined, size: 22, color: _kInk),
+              child: Icon(Icons.add_photo_alternate_outlined, size: 22, color: _kOnBarDim),
             ),
           ),
           _sep(),
@@ -714,7 +717,7 @@ class _NotebookScreenState extends State<NotebookScreen> {
                             child: Icon(Icons.bookmark, size: 16, color: Color(0xFFE53935)),
                           ),
                         Text('${(_page + 1).clamp(1, pages.length)} / ${pages.length}',
-                            style: const TextStyle(fontWeight: FontWeight.w700, color: _kInk)),
+                            style: const TextStyle(fontWeight: FontWeight.w700, color: Color(0xFF3A3F47))),
                       ]),
                     ),
                   ),
@@ -736,10 +739,10 @@ class _ToolOptions extends StatelessWidget {
   const _ToolOptions({required this.settings, required this.onClearPage});
 
   Widget _divider() =>
-      Container(width: 1, height: 22, margin: const EdgeInsets.symmetric(horizontal: 8), color: Colors.black12);
+      Container(width: 1, height: 22, margin: const EdgeInsets.symmetric(horizontal: 8), color: Color(0x40FFFFFF));
 
   Widget _labeled(Widget icon, String label, bool on, VoidCallback onTap, {String? tip}) {
-    final color = on ? kAccent : _kInk;
+    final color = on ? _kOnBar : _kOnBarDim;
     return Tooltip(
       message: tip ?? label,
       child: InkWell(
@@ -749,7 +752,7 @@ class _ToolOptions extends StatelessWidget {
           constraints: const BoxConstraints(minWidth: 48),
           padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 3),
           decoration: BoxDecoration(
-            color: on ? kAccent.withValues(alpha: 0.12) : null,
+            color: on ? _kSelBg : null,
             borderRadius: BorderRadius.circular(8),
           ),
           child: Column(mainAxisSize: MainAxisSize.min, children: [
@@ -767,11 +770,11 @@ class _ToolOptions extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
           decoration: BoxDecoration(
-            color: on ? kAccent.withValues(alpha: 0.12) : null,
+            color: on ? _kSelBg : null,
             borderRadius: BorderRadius.circular(8),
           ),
           child: Text(label,
-              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: on ? kAccent : _kInk)),
+              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: on ? _kOnBar : _kOnBarDim)),
         ),
       );
 
@@ -784,12 +787,12 @@ class _ToolOptions extends StatelessWidget {
           alignment: Alignment.center,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            color: on ? kAccent.withValues(alpha: 0.12) : null,
+            color: on ? _kSelBg : null,
           ),
           child: Container(
             width: dotSize,
             height: dotSize,
-            decoration: BoxDecoration(color: on ? kAccent : _kInk, shape: BoxShape.circle),
+            decoration: BoxDecoration(color: on ? _kOnBar : _kOnBarDim, shape: BoxShape.circle),
           ),
         ),
       );
@@ -810,7 +813,7 @@ class _ToolOptions extends StatelessWidget {
             padding: const EdgeInsets.all(3),
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              border: Border.all(color: c == current ? kAccent : Colors.transparent, width: 2),
+              border: Border.all(color: c == current ? _kOnBar : Colors.transparent, width: 2),
             ),
             child: Container(
               decoration: BoxDecoration(color: c, shape: BoxShape.circle, border: Border.all(color: Colors.black12)),
@@ -897,10 +900,10 @@ class _ToolOptions extends StatelessWidget {
       ],
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-        decoration: BoxDecoration(color: _kPill, borderRadius: BorderRadius.circular(8)),
+        decoration: BoxDecoration(color: Color(0x26FFFFFF), borderRadius: BorderRadius.circular(8)),
         child: Row(mainAxisSize: MainAxisSize.min, children: [
-          Text(settings.font, style: _font(settings.font, const TextStyle(fontSize: 14, color: Color(0xFF2B2F36)))),
-          const Icon(Icons.arrow_drop_down, size: 20),
+          Text(settings.font, style: _font(settings.font, const TextStyle(fontSize: 14, color: Color(0xFFFFFFFF)))),
+          const Icon(Icons.arrow_drop_down, size: 20, color: _kOnBar),
         ]),
       ),
     );
@@ -943,6 +946,7 @@ class _ToolOptions extends StatelessWidget {
                 () => settings.set(() => settings.eraserSize = EditorSettings.eraserSizes[i])),
           _divider(),
           TextButton.icon(
+            style: TextButton.styleFrom(foregroundColor: _kOnBar),
             onPressed: onClearPage,
             icon: const Icon(Icons.delete_sweep_outlined, size: 20),
             label: const Text('Borrar página'),
@@ -952,7 +956,7 @@ class _ToolOptions extends StatelessWidget {
       case Tool.shape:
         children.addAll([
           for (final k in ShapeKind.values)
-            _labeled(ShapeGlyph(kind: k, color: settings.shape == k ? kAccent : _kInk, size: const Size(24, 17)),
+            _labeled(ShapeGlyph(kind: k, color: settings.shape == k ? _kOnBar : _kOnBarDim, size: const Size(24, 17)),
                 _shapeNames[k]!, settings.shape == k, () => settings.set(() => settings.shape = k)),
           _divider(),
           _labeled(const Icon(Icons.format_color_fill), 'Relleno', settings.shapeFill,
@@ -984,17 +988,19 @@ class _ToolOptions extends StatelessWidget {
           IconButton(
             tooltip: 'Más pequeño',
             visualDensity: VisualDensity.compact,
+            color: _kOnBar,
             icon: const Icon(Icons.remove, size: 20),
             onPressed: () => settings.set(() => settings.textSize = (settings.textSize - 2).clamp(10.0, 120.0)),
           ),
           SizedBox(
             width: 28,
             child: Text(settings.textSize.round().toString(),
-                textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.w600)),
+                textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.w600, color: _kOnBar)),
           ),
           IconButton(
             tooltip: 'Más grande',
             visualDensity: VisualDensity.compact,
+            color: _kOnBar,
             icon: const Icon(Icons.add, size: 20),
             onPressed: () => settings.set(() => settings.textSize = (settings.textSize + 2).clamp(10.0, 120.0)),
           ),
@@ -1009,11 +1015,11 @@ class _ToolOptions extends StatelessWidget {
         break;
       case Tool.select:
         children.add(const Text('Rodea con el lápiz lo que quieras mover, escalar, copiar o guardar como pegatina',
-            style: TextStyle(color: Colors.black54, fontSize: 13)));
+            style: TextStyle(color: Color(0xCCFFFFFF), fontSize: 13)));
         break;
       case Tool.laser:
         children.add(const Text('Puntero láser: lo que dibujes desaparece al momento (ideal para presentar)',
-            style: TextStyle(color: Colors.black54, fontSize: 13)));
+            style: TextStyle(color: Color(0xCCFFFFFF), fontSize: 13)));
         break;
     }
     return Row(mainAxisSize: MainAxisSize.min, children: children);

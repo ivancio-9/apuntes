@@ -1100,10 +1100,15 @@ class NotebookCanvasState extends State<NotebookCanvas> with SingleTickerProvide
     return _cur;
   }
 
-  void _commitStroke() {
+  /// Puntos tal y como se guardarán (se usan también para dibujar en vivo, así no hay "salto" al soltar).
+  Float32List _finalPoints() {
     final raw = _currentPoints();
-    if (raw.length < 3 || _aPage >= pages.length) return;
-    final pts = _snapA != null ? Float32List.fromList(raw) : smoothPoints(raw);
+    return _snapA != null ? Float32List.fromList(raw) : smoothPoints(raw);
+  }
+
+  void _commitStroke() {
+    if (_currentPoints().length < 3 || _aPage >= pages.length) return;
+    final pts = _finalPoints();
     final t = nowMs();
     final rec = Rec(
       id: newId(),
@@ -1184,7 +1189,7 @@ class NotebookCanvasState extends State<NotebookCanvas> with SingleTickerProvide
     if (_mode == _Mode.ink && _cur.length >= 3) {
       canvas.save();
       canvas.clipRect(const Rect.fromLTWH(0, 0, kPageW, kPageH));
-      paintStroke(canvas, Stroke(_strokeTool, _strokeColor, _strokeWidth, Float32List.fromList(_currentPoints())));
+      paintStroke(canvas, Stroke(_strokeTool, _strokeColor, _strokeWidth, _finalPoints()));
       canvas.restore();
     }
     final a = _shapeA, b = _shapeB;
@@ -1629,7 +1634,7 @@ class NotebookCanvasState extends State<NotebookCanvas> with SingleTickerProvide
                         child: CustomPaint(painter: _InkPainter(pics, _scale, _pan)),
                       ),
                     ),
-                    Positioned.fill(child: CustomPaint(painter: _LivePainter(this))),
+                    Positioned.fill(child: RepaintBoundary(child: CustomPaint(painter: _LivePainter(this)))),
                   ]),
                 ),
               ),
