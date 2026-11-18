@@ -1,138 +1,68 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
-import 'package:image_picker/image_picker.dart';
 
 import '../app_scope.dart';
 import '../data/store.dart';
 import '../data/sync.dart';
-import 'blob_image.dart';
+import '../platform/files_stub.dart' if (dart.library.js_interop) '../platform/files_web.dart';
 import 'color_picker.dart';
-import 'editor_state.dart';
+import 'covers.dart';
 import 'export.dart';
 import 'notebook_screen.dart';
+import 'search_screen.dart';
 
-const kCoverColors = [
-  0xFF3F51B5,
-  0xFF1E88E5,
-  0xFF00897B,
-  0xFF43A047,
-  0xFFFDD835,
-  0xFFFB8C00,
-  0xFFE53935,
-  0xFFD81B60,
-  0xFF8E24AA,
-  0xFF6D4C41,
-  0xFF546E7A,
-  0xFF212121,
-];
+export 'covers.dart' show kCoverColors, NotebookCover;
 
-TextStyle _fontStyle(String? font, TextStyle base) {
-  try {
-    return GoogleFonts.getFont(font ?? 'Roboto', textStyle: base);
-  } catch (_) {
-    return base;
-  }
+const _kInk = Color(0xFF22262C);
+const _kSub = Color(0xFF7A818C);
+const _kBg = Color(0xFFF6F7F9);
+
+const kFolderColors = [0xFF5B8DEF, 0xFF34C38F, 0xFFF5A623, 0xFFE8505B, 0xFF9B6BDF, 0xFF8D99AE];
+
+String _friendlyDate(int ms) {
+  if (ms == 0) return '';
+  final d = DateTime.fromMillisecondsSinceEpoch(ms);
+  final now = DateTime.now();
+  final today = DateTime(now.year, now.month, now.day);
+  final day = DateTime(d.year, d.month, d.day);
+  final diff = today.difference(day).inDays;
+  String two(int n) => n.toString().padLeft(2, '0');
+  if (diff == 0) return 'Hoy, ${two(d.hour)}:${two(d.minute)}';
+  if (diff == 1) return 'Ayer';
+  if (diff < 7) return 'Hace $diff días';
+  const months = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+  return '${d.day} ${months[d.month - 1]} ${d.year}';
 }
 
-/// Tapa de un cuaderno (se usa en la biblioteca y en la vista previa del editor).
-class NotebookCover extends StatelessWidget {
-  final AppScope app;
-  final Map<String, dynamic> data;
-  const NotebookCover({super.key, required this.app, required this.data});
+/// Dibujo de una carpeta.
+class _FolderPainter extends CustomPainter {
+  final Color color;
+  _FolderPainter(this.color);
 
   @override
-  Widget build(BuildContext context) {
-    final color = Color(((data['color'] ?? kCoverColors[0]) as num).toInt());
-    final image = data['coverImage'] as String?;
-    final title = (data['title'] ?? '') as String;
-    final subtitle = (data['subtitle'] ?? '') as String;
-    final font = data['titleFont'] as String?;
-    final dark = color.computeLuminance() < 0.5;
-
-    return Material(
-      color: color,
-      elevation: 3,
-      borderRadius: const BorderRadius.only(
-        topRight: Radius.circular(12),
-        bottomRight: Radius.circular(12),
-        topLeft: Radius.circular(4),
-        bottomLeft: Radius.circular(4),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: Stack(fit: StackFit.expand, children: [
-        if (image != null) BlobImage(app: app, blobId: image),
-        if (image != null)
-          const DecoratedBox(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [Colors.transparent, Color(0xAA000000)],
-                stops: [0.45, 1],
-              ),
-            ),
-          ),
-        Positioned(
-          left: 9,
-          top: 0,
-          bottom: 0,
-          child: Container(width: 3, color: Colors.black.withValues(alpha: 0.18)),
-        ),
-        if (image != null)
-          Positioned(
-            left: 18,
-            right: 10,
-            bottom: 12,
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
-              Text(title,
-                  maxLines: 3,
-                  overflow: TextOverflow.ellipsis,
-                  style: _fontStyle(
-                      font,
-                      const TextStyle(
-                          color: Colors.white,
-                          fontSize: 16,
-                          fontWeight: FontWeight.w700,
-                          shadows: [Shadow(blurRadius: 4, color: Colors.black54)]))),
-              if (subtitle.isNotEmpty)
-                Text(subtitle,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(color: Colors.white70, fontSize: 11.5)),
-            ]),
-          )
-        else
-          Center(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(22, 12, 12, 12),
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
-                decoration: BoxDecoration(
-                  color: dark ? Colors.white.withValues(alpha: 0.92) : Colors.white.withValues(alpha: 0.75),
-                  borderRadius: BorderRadius.circular(4),
-                ),
-                child: Column(mainAxisSize: MainAxisSize.min, children: [
-                  Text(title,
-                      textAlign: TextAlign.center,
-                      maxLines: 3,
-                      overflow: TextOverflow.ellipsis,
-                      style: _fontStyle(
-                          font, const TextStyle(fontWeight: FontWeight.w700, fontSize: 15, color: Colors.black87))),
-                  if (subtitle.isNotEmpty) ...[
-                    const SizedBox(height: 4),
-                    Text(subtitle,
-                        textAlign: TextAlign.center,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(fontSize: 11, color: Colors.black54)),
-                  ],
-                ]),
-              ),
-            ),
-          ),
-      ]),
-    );
+  void paint(Canvas canvas, Size size) {
+    final w = size.width, h = size.height;
+    final back = Path()
+      ..moveTo(0, h * 0.12)
+      ..quadraticBezierTo(0, 0, w * 0.06, 0)
+      ..lineTo(w * 0.36, 0)
+      ..quadraticBezierTo(w * 0.40, 0, w * 0.43, h * 0.06)
+      ..lineTo(w * 0.47, h * 0.12)
+      ..lineTo(w * 0.94, h * 0.12)
+      ..quadraticBezierTo(w, h * 0.12, w, h * 0.2)
+      ..lineTo(w, h * 0.9)
+      ..quadraticBezierTo(w, h, w * 0.94, h)
+      ..lineTo(w * 0.06, h)
+      ..quadraticBezierTo(0, h, 0, h * 0.9)
+      ..close();
+    final hsl = HSLColor.fromColor(color);
+    canvas.drawPath(back, Paint()..color = hsl.withLightness((hsl.lightness - 0.12).clamp(0.0, 1.0)).toColor());
+    final front = RRect.fromRectAndRadius(Rect.fromLTWH(0, h * 0.24, w, h * 0.76), Radius.circular(w * 0.06));
+    canvas.drawRRect(front.shift(const Offset(0, 2)), Paint()..color = const Color(0x22000000));
+    canvas.drawRRect(front, Paint()..color = color);
   }
+
+  @override
+  bool shouldRepaint(_FolderPainter old) => old.color != color;
 }
 
 class LibraryScreen extends StatefulWidget {
@@ -146,6 +76,7 @@ class LibraryScreen extends StatefulWidget {
 class _LibraryScreenState extends State<LibraryScreen> {
   Store get store => widget.app.store;
   SyncService get sync => widget.app.sync;
+  String? _folder; // carpeta abierta (null = raíz)
 
   @override
   void initState() {
@@ -165,320 +96,500 @@ class _LibraryScreenState extends State<LibraryScreen> {
     if (mounted) setState(() {});
   }
 
-  void _open(Rec nb) {
+  void _snack(String msg) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+
+  void _open(Rec nb, {String? pageId}) {
     store.updateData(nb, {'opened': nowMs()});
     Navigator.of(context).push(MaterialPageRoute(
-      builder: (_) => NotebookScreen(app: widget.app, notebookId: nb.id),
+      builder: (_) => NotebookScreen(app: widget.app, notebookId: nb.id, initialPageId: pageId),
     ));
   }
 
-  Future<void> _edit({Rec? nb}) async {
+  // ---------- Cuadernos ----------
+
+  Future<void> _newNotebook() async {
     final result = await showDialog<Map<String, dynamic>>(
       context: context,
-      builder: (c) => _CoverEditor(app: widget.app, initial: nb?.data, isNew: nb == null),
+      builder: (c) => CoverEditor(app: widget.app, initial: null, isNew: true),
     );
     if (result == null) return;
-    if (nb == null) {
-      final created = await store.createNotebook(result['title'] as String,
-          paper: result['paper'] as String, color: result['color'] as int);
-      final fresh = store.recs[created.id]!;
-      await store.updateData(fresh, result);
-      if (mounted) _open(store.recs[created.id]!);
-    } else {
-      await store.updateData(nb, result);
-    }
+    final nb = await store.createNotebook(result['title'] as String,
+        paper: result['paper'] as String, color: result['color'] as int, extra: {...result, 'folder': _folder});
+    if (mounted) _open(store.recs[nb.id]!);
   }
 
-  Future<void> _delete(Rec nb) async {
+  Future<void> _editNotebook(Rec nb) async {
+    final result = await showDialog<Map<String, dynamic>>(
+      context: context,
+      builder: (c) => CoverEditor(app: widget.app, initial: nb.data, isNew: false),
+    );
+    if (result != null) await store.updateData(nb, result);
+  }
+
+  Future<void> _deleteNotebook(Rec nb) async {
+    final ok = await _confirm('¿Eliminar «${nb.data['title']}»?', 'Se borrará el cuaderno con todas sus páginas.');
+    if (ok) await store.remove(nb);
+  }
+
+  Future<bool> _confirm(String title, String body) async {
     final ok = await showDialog<bool>(
       context: context,
       builder: (c) => AlertDialog(
-        title: Text('¿Eliminar «${nb.data['title']}»?'),
-        content: const Text('Se borrará el cuaderno con todas sus páginas.'),
+        title: Text(title),
+        content: Text(body),
         actions: [
           TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Cancelar')),
           FilledButton(onPressed: () => Navigator.pop(c, true), child: const Text('Eliminar')),
         ],
       ),
     );
-    if (ok == true) await store.remove(nb);
+    return ok == true;
   }
 
-  Widget _syncIcon() {
+  Future<void> _moveTo(Rec item) async {
+    final all = store.folders(null, true).where((f) => f.id != item.id).toList();
+    final target = await showDialog<String>(
+      context: context,
+      builder: (c) => SimpleDialog(
+        title: const Text('Mover a…'),
+        children: [
+          SimpleDialogOption(
+            onPressed: () => Navigator.pop(c, '__root__'),
+            child: const Row(children: [Icon(Icons.home_outlined), SizedBox(width: 12), Text('Documentos (inicio)')]),
+          ),
+          for (final f in all)
+            SimpleDialogOption(
+              onPressed: () => Navigator.pop(c, f.id),
+              child: Row(children: [
+                Icon(Icons.folder, color: Color(((f.data['color'] ?? kFolderColors[0]) as num).toInt())),
+                const SizedBox(width: 12),
+                Text((f.data['name'] ?? '') as String),
+              ]),
+            ),
+          SimpleDialogOption(
+            onPressed: () => Navigator.pop(c, '__new__'),
+            child: const Row(children: [Icon(Icons.create_new_folder_outlined), SizedBox(width: 12), Text('Nueva carpeta…')]),
+          ),
+        ],
+      ),
+    );
+    if (target == null) return;
+    String? dest = target == '__root__' ? null : target;
+    if (target == '__new__') {
+      final f = await _folderDialog();
+      if (f == null) return;
+      dest = f.id;
+    }
+    await store.updateData(item, {'folder': dest});
+  }
+
+  // ---------- Carpetas ----------
+
+  Future<Rec?> _folderDialog({Rec? folder}) async {
+    final name = TextEditingController(text: (folder?.data['name'] ?? '') as String);
+    var color = ((folder?.data['color'] ?? kFolderColors[0]) as num).toInt();
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (c) => StatefulBuilder(
+        builder: (c, setD) => AlertDialog(
+          title: Text(folder == null ? 'Nueva carpeta' : 'Editar carpeta'),
+          content: SizedBox(
+            width: 360,
+            child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+              TextField(
+                controller: name,
+                autofocus: true,
+                decoration: const InputDecoration(labelText: 'Nombre'),
+                onSubmitted: (_) => Navigator.pop(c, true),
+              ),
+              const SizedBox(height: 18),
+              Wrap(spacing: 10, runSpacing: 10, children: [
+                for (final cc in [...kFolderColors, if (!kFolderColors.contains(color)) color])
+                  GestureDetector(
+                    onTap: () => setD(() => color = cc),
+                    child: SizedBox(
+                      width: 46,
+                      height: 38,
+                      child: Stack(children: [
+                        Positioned.fill(child: CustomPaint(painter: _FolderPainter(Color(cc)))),
+                        if (cc == color) const Center(child: Icon(Icons.check, color: Colors.white, size: 20)),
+                      ]),
+                    ),
+                  ),
+                IconButton(
+                  tooltip: 'Otro color',
+                  icon: const Icon(Icons.palette_outlined),
+                  onPressed: () async {
+                    final c2 = await showColorPicker(c, Color(color), title: 'Color de la carpeta');
+                    if (c2 != null) setD(() => color = c2.toARGB32());
+                  },
+                ),
+              ]),
+            ]),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Cancelar')),
+            FilledButton(onPressed: () => Navigator.pop(c, true), child: Text(folder == null ? 'Crear' : 'Guardar')),
+          ],
+        ),
+      ),
+    );
+    if (ok != true) return null;
+    final n = name.text.trim().isEmpty ? 'Carpeta' : name.text.trim();
+    if (folder == null) return store.createFolder(n, parent: _folder, color: color);
+    await store.updateData(folder, {'name': n, 'color': color});
+    return store.recs[folder.id];
+  }
+
+  Future<void> _deleteFolder(Rec f) async {
+    final ok = await _confirm('¿Eliminar la carpeta «${f.data['name']}»?',
+        'Los cuadernos que contiene no se borran: pasan a la carpeta superior.');
+    if (ok) await store.removeFolder(f);
+  }
+
+  // ---------- Importar PDF ----------
+
+  Future<void> _importPdf() async {
+    if (!pdfImportSupported) {
+      _snack('Importar PDF solo está disponible en la versión web (iPad u ordenador).');
+      return;
+    }
+    final picked = await pickFile('application/pdf');
+    if (picked == null || !mounted) return;
+    final progress = ValueNotifier<String>('Abriendo PDF…');
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (c) => AlertDialog(
+        content: Row(children: [
+          const SizedBox(width: 28, height: 28, child: CircularProgressIndicator(strokeWidth: 3)),
+          const SizedBox(width: 20),
+          Expanded(child: ValueListenableBuilder<String>(valueListenable: progress, builder: (_, v, __) => Text(v))),
+        ]),
+      ),
+    );
+    try {
+      final images = await pdfToImages(picked.$2, onProgress: (i, n) => progress.value = 'Importando página $i de $n…');
+      var title = picked.$1;
+      if (title.toLowerCase().endsWith('.pdf')) title = title.substring(0, title.length - 4);
+      final nb = await store.createNotebook(title,
+          paper: 'blank', color: 0xFFE8505B, extra: {'folder': _folder, 'coverStyle': 'gradient'}, firstPage: false);
+      for (final img in images) {
+        final blob = newId();
+        await store.putBlob(blob, img);
+        await store.addPageWith(nb.id, {'template': 'blank', 'bg': blob});
+      }
+      if (mounted) Navigator.of(context, rootNavigator: true).pop();
+      if (mounted) _open(store.recs[nb.id]!);
+    } catch (e) {
+      if (mounted) {
+        Navigator.of(context, rootNavigator: true).pop();
+        _snack('No se pudo importar el PDF: $e');
+      }
+    }
+  }
+
+  void _newMenu(BuildContext anchor) async {
+    final box = anchor.findRenderObject() as RenderBox;
+    final pos = box.localToGlobal(Offset.zero);
+    final v = await showMenu<String>(
+      context: context,
+      position: RelativeRect.fromLTRB(pos.dx, pos.dy + 40, pos.dx + box.size.width, 0),
+      items: [
+        const PopupMenuItem(
+            value: 'nb', child: Row(children: [Icon(Icons.menu_book_outlined), SizedBox(width: 12), Text('Cuaderno')])),
+        const PopupMenuItem(
+            value: 'folder',
+            child: Row(children: [Icon(Icons.create_new_folder_outlined), SizedBox(width: 12), Text('Carpeta')])),
+        if (pdfImportSupported)
+          const PopupMenuItem(
+              value: 'pdf',
+              child: Row(children: [Icon(Icons.picture_as_pdf_outlined), SizedBox(width: 12), Text('Importar PDF')])),
+      ],
+    );
+    if (v == 'nb') _newNotebook();
+    if (v == 'folder') _folderDialog();
+    if (v == 'pdf') _importPdf();
+  }
+
+  // ---------- Interfaz ----------
+
+  Widget _syncChip() {
     final IconData icon;
     final String tip;
+    Color color = _kSub;
     switch (sync.state) {
       case SyncState.syncing:
-        icon = Icons.cloud_sync_outlined;
+        icon = Icons.sync;
         tip = 'Sincronizando…';
         break;
       case SyncState.offline:
       case SyncState.error:
         icon = Icons.cloud_off_outlined;
         tip = 'Sin conexión con el servidor. Los cambios se guardan en este dispositivo.';
+        color = const Color(0xFFE8505B);
         break;
       default:
         icon = store.dirty.isEmpty ? Icons.cloud_done_outlined : Icons.cloud_upload_outlined;
-        tip = store.dirty.isEmpty ? 'Todo sincronizado' : 'Cambios pendientes de subir';
+        tip = store.dirty.isEmpty ? 'Todo sincronizado con tu servidor' : 'Cambios pendientes de subir';
     }
-    return IconButton(tooltip: tip, icon: Icon(icon), onPressed: sync.syncNow);
+    return IconButton(tooltip: tip, icon: Icon(icon, color: color), onPressed: sync.syncNow);
+  }
+
+  List<Rec> _breadcrumbs() {
+    final list = <Rec>[];
+    var id = _folder;
+    while (id != null) {
+      final f = store.recs[id];
+      if (f == null || f.deleted) break;
+      list.insert(0, f);
+      id = f.data['folder'] as String?;
+    }
+    return list;
   }
 
   @override
   Widget build(BuildContext context) {
-    final nbs = store.notebooks();
+    if (_folder != null && (store.recs[_folder!]?.deleted ?? true)) _folder = null;
+    final folders = store.folders(_folder);
+    final nbs = store.notebooks(_folder);
+    final crumbs = _breadcrumbs();
+    final title = crumbs.isEmpty ? 'Documentos' : (crumbs.last.data['name'] ?? '') as String;
+
     return Scaffold(
-      backgroundColor: const Color(0xFFF7F8FA),
-      appBar: AppBar(
-        backgroundColor: const Color(0xFFF7F8FA),
-        title: const Text('Mis cuadernos', style: TextStyle(fontWeight: FontWeight.w700)),
-        actions: [
-          _syncIcon(),
-          PopupMenuButton<String>(
-            onSelected: (v) async {
-              if (v == 'logout') await sync.logout();
-            },
-            itemBuilder: (c) => const [
-              PopupMenuItem(value: 'logout', child: Text('Cerrar sesión')),
-            ],
-          ),
-        ],
-      ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _edit(),
-        icon: const Icon(Icons.add),
-        label: const Text('Nuevo cuaderno'),
-      ),
-      body: nbs.isEmpty
-          ? const Center(child: Text('Crea tu primer cuaderno con el botón de abajo.'))
-          : GridView.builder(
-              padding: const EdgeInsets.fromLTRB(24, 16, 24, 100),
-              gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                maxCrossAxisExtent: 190,
-                mainAxisSpacing: 26,
-                crossAxisSpacing: 22,
-                childAspectRatio: 0.6,
-              ),
-              itemCount: nbs.length,
-              itemBuilder: (c, i) {
-                final nb = nbs[i];
-                final pages = store.pages(nb.id).length;
-                return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Expanded(
-                    child: GestureDetector(
-                      onTap: () => _open(nb),
-                      child: NotebookCover(app: widget.app, data: nb.data),
-                    ),
+      backgroundColor: _kBg,
+      body: SafeArea(
+        child: CustomScrollView(slivers: [
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(28, 18, 16, 4),
+              child: Row(children: [
+                if (crumbs.isNotEmpty)
+                  IconButton(
+                    tooltip: 'Atrás',
+                    icon: const Icon(Icons.chevron_left, size: 30, color: Color(0xFF2F6FED)),
+                    onPressed: () => setState(() => _folder = crumbs.last.data['folder'] as String?),
                   ),
-                  Row(children: [
-                    Expanded(
-                      child: Padding(
-                        padding: const EdgeInsets.only(left: 4),
-                        child: Text(pages == 1 ? '1 página' : '$pages páginas',
-                            style: Theme.of(context).textTheme.bodySmall),
-                      ),
-                    ),
-                    PopupMenuButton<String>(
-                      icon: const Icon(Icons.more_horiz),
-                      onSelected: (v) {
-                        if (v == 'edit') {
-                          _edit(nb: nb);
-                        } else if (v == 'export') {
-                          showExportDialog(context, widget.app, nb);
-                        } else {
-                          _delete(nb);
-                        }
-                      },
-                      itemBuilder: (c) => const [
-                        PopupMenuItem(value: 'edit', child: Text('Personalizar portada')),
-                        PopupMenuItem(value: 'export', child: Text('Exportar (PDF, JPG, PNG)')),
-                        PopupMenuItem(value: 'delete', child: Text('Eliminar')),
-                      ],
-                    ),
+                Expanded(
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    if (crumbs.isNotEmpty)
+                      Text(['Documentos', ...crumbs.take(crumbs.length - 1).map((f) => f.data['name'] as String? ?? '')].join('  ›  '),
+                          style: const TextStyle(color: _kSub, fontSize: 13)),
+                    Text(title,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontSize: 32, fontWeight: FontWeight.w800, color: _kInk, letterSpacing: -0.5)),
                   ]),
-                ]);
-              },
+                ),
+                IconButton(
+                  tooltip: 'Buscar',
+                  icon: const Icon(Icons.search, color: _kInk),
+                  onPressed: () async {
+                    final r = await Navigator.of(context).push<SearchResult>(
+                        MaterialPageRoute(builder: (_) => SearchScreen(app: widget.app)));
+                    if (r == null) return;
+                    final nb = store.recs[r.notebookId];
+                    if (nb != null) _open(nb, pageId: r.pageId);
+                  },
+                ),
+                _syncChip(),
+                PopupMenuButton<String>(
+                  icon: const Icon(Icons.more_horiz, color: _kInk),
+                  onSelected: (v) async {
+                    if (v == 'logout') await sync.logout();
+                  },
+                  itemBuilder: (c) => const [PopupMenuItem(value: 'logout', child: Text('Cerrar sesión'))],
+                ),
+              ]),
             ),
+          ),
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(28, 16, 28, 60),
+            sliver: SliverGrid(
+              gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                maxCrossAxisExtent: 180,
+                mainAxisSpacing: 28,
+                crossAxisSpacing: 26,
+                childAspectRatio: 0.56,
+              ),
+              delegate: SliverChildListDelegate([
+                Builder(builder: (bc) => _NewTile(onTap: () => _newMenu(bc))),
+                for (final f in folders)
+                  _FolderTile(
+                    folder: f,
+                    count: store.folderCount(f.id),
+                    onTap: () => setState(() => _folder = f.id),
+                    onMenu: (v) {
+                      if (v == 'edit') _folderDialog(folder: f);
+                      if (v == 'move') _moveTo(f);
+                      if (v == 'delete') _deleteFolder(f);
+                    },
+                  ),
+                for (final nb in nbs)
+                  _NotebookTile(
+                    app: widget.app,
+                    nb: nb,
+                    pages: store.pages(nb.id).length,
+                    onTap: () => _open(nb),
+                    onMenu: (v) {
+                      if (v == 'edit') _editNotebook(nb);
+                      if (v == 'move') _moveTo(nb);
+                      if (v == 'export') showExportDialog(context, widget.app, nb);
+                      if (v == 'delete') _deleteNotebook(nb);
+                    },
+                  ),
+              ]),
+            ),
+          ),
+        ]),
+      ),
     );
   }
 }
 
-/// Editor de portada: nombre, subtítulo, letra, color, foto y papel, con vista previa.
-class _CoverEditor extends StatefulWidget {
-  final AppScope app;
-  final Map<String, dynamic>? initial;
-  final bool isNew;
-  const _CoverEditor({required this.app, required this.initial, required this.isNew});
-
-  @override
-  State<_CoverEditor> createState() => _CoverEditorState();
-}
-
-class _CoverEditorState extends State<_CoverEditor> {
-  late final TextEditingController title =
-      TextEditingController(text: (widget.initial?['title'] ?? '') as String);
-  late final TextEditingController subtitle =
-      TextEditingController(text: (widget.initial?['subtitle'] ?? '') as String);
-  late String paper = (widget.initial?['paper'] ?? 'lined') as String;
-  late int color = ((widget.initial?['color'] ?? kCoverColors[0]) as num).toInt();
-  late String? image = widget.initial?['coverImage'] as String?;
-  late String font = (widget.initial?['titleFont'] ?? 'Roboto') as String;
-  bool _loadingImage = false;
-
-  Map<String, dynamic> get _data => {
-        'title': title.text.trim().isEmpty ? 'Sin título' : title.text.trim(),
-        'subtitle': subtitle.text.trim(),
-        'paper': paper,
-        'color': color,
-        'coverImage': image,
-        'titleFont': font,
-      };
-
-  Future<void> _pickImage() async {
-    setState(() => _loadingImage = true);
-    try {
-      final x = await ImagePicker().pickImage(
-        source: ImageSource.gallery,
-        maxWidth: 900,
-        maxHeight: 1400,
-        imageQuality: 85,
-      );
-      if (x != null) {
-        final bytes = await x.readAsBytes();
-        final id = newId();
-        await widget.app.store.putBlob(id, bytes);
-        image = id;
-      }
-    } catch (_) {}
-    if (mounted) setState(() => _loadingImage = false);
-  }
-
-  Widget _section(String label) => Padding(
-        padding: const EdgeInsets.only(top: 16, bottom: 6),
-        child: Text(label, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
-      );
+class _NewTile extends StatelessWidget {
+  final VoidCallback onTap;
+  const _NewTile({required this.onTap});
 
   @override
   Widget build(BuildContext context) {
-    final wide = MediaQuery.of(context).size.width > 640;
-    final preview = SizedBox(
-      width: 150,
-      height: 230,
-      child: NotebookCover(app: widget.app, data: _data),
-    );
-    final form = Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-      TextField(
-        controller: title,
-        autofocus: widget.isNew,
-        decoration: const InputDecoration(labelText: 'Nombre'),
-        onChanged: (_) => setState(() {}),
-      ),
-      TextField(
-        controller: subtitle,
-        decoration: const InputDecoration(labelText: 'Subtítulo o descripción (opcional)'),
-        onChanged: (_) => setState(() {}),
-      ),
-      _section('Letra del título'),
-      DropdownButton<String>(
-        value: font,
-        isExpanded: true,
-        items: [
-          for (final f in kFonts)
-            DropdownMenuItem(value: f, child: Text(f, style: _fontStyle(f, const TextStyle(fontSize: 16)))),
-        ],
-        onChanged: (v) => setState(() => font = v ?? font),
-      ),
-      _section('Color'),
-      Wrap(spacing: 8, runSpacing: 8, children: [
-        for (final cc in [...kCoverColors, if (!kCoverColors.contains(color)) color])
-          GestureDetector(
-            onTap: () => setState(() => color = cc),
-            child: Container(
-              width: 30,
-              height: 30,
-              decoration: BoxDecoration(
-                color: Color(cc),
-                shape: BoxShape.circle,
-                border: Border.all(color: cc == color ? Colors.black87 : Colors.black12, width: cc == color ? 3 : 1),
-              ),
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Expanded(
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(12),
+          child: Container(
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: const Color(0xFFCFD5DE), width: 1.5),
             ),
-          ),
-        Tooltip(
-          message: 'Otro color',
-          child: InkWell(
-            customBorder: const CircleBorder(),
-            onTap: () async {
-              final c = await showColorPicker(context, Color(color), title: 'Color de la portada');
-              if (c != null) setState(() => color = c.toARGB32());
-            },
-            child: Container(
-              width: 30,
-              height: 30,
-              decoration: const BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: SweepGradient(colors: [
-                  Color(0xFFFF0000),
-                  Color(0xFFFFFF00),
-                  Color(0xFF00FF00),
-                  Color(0xFF00FFFF),
-                  Color(0xFF0000FF),
-                  Color(0xFFFF00FF),
-                  Color(0xFFFF0000),
-                ]),
-              ),
-              child: const Icon(Icons.add, size: 18, color: Colors.white),
+            child: const Center(
+              child: Column(mainAxisSize: MainAxisSize.min, children: [
+                CircleAvatar(
+                  radius: 26,
+                  backgroundColor: Color(0x1F2F6FED),
+                  child: Icon(Icons.add, size: 30, color: Color(0xFF2F6FED)),
+                ),
+                SizedBox(height: 10),
+                Text('Nuevo…', style: TextStyle(fontWeight: FontWeight.w700, color: Color(0xFF2F6FED))),
+              ]),
             ),
           ),
         ),
-      ]),
-      _section('Foto de portada'),
-      Wrap(spacing: 8, children: [
-        OutlinedButton.icon(
-          onPressed: _loadingImage ? null : _pickImage,
-          icon: _loadingImage
-              ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
-              : const Icon(Icons.photo_outlined),
-          label: Text(image == null ? 'Elegir foto' : 'Cambiar foto'),
-        ),
-        if (image != null)
-          TextButton.icon(
-            onPressed: () => setState(() => image = null),
-            icon: const Icon(Icons.close),
-            label: const Text('Quitar foto'),
-          ),
-      ]),
-      _section('Papel de las páginas'),
-      Wrap(spacing: 6, children: [
-        for (final e in kPapers.entries)
-          ChoiceChip(
-            label: Text(e.value),
-            selected: paper == e.key,
-            onSelected: (_) => setState(() => paper = e.key),
-          ),
-      ]),
+      ),
+      const SizedBox(height: 44),
     ]);
+  }
+}
 
-    return AlertDialog(
-      title: Text(widget.isNew ? 'Nuevo cuaderno' : 'Personalizar cuaderno'),
-      content: SizedBox(
-        width: wide ? 560 : 360,
-        child: SingleChildScrollView(
-          child: wide
-              ? Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  preview,
-                  const SizedBox(width: 24),
-                  Expanded(child: form),
-                ])
-              : Column(children: [Center(child: preview), const SizedBox(height: 12), form]),
+class _FolderTile extends StatelessWidget {
+  final Rec folder;
+  final int count;
+  final VoidCallback onTap;
+  final ValueChanged<String> onMenu;
+  const _FolderTile({required this.folder, required this.count, required this.onTap, required this.onMenu});
+
+  @override
+  Widget build(BuildContext context) {
+    final color = Color(((folder.data['color'] ?? kFolderColors[0]) as num).toInt());
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Expanded(
+        child: GestureDetector(
+          onTap: onTap,
+          child: Center(
+            child: AspectRatio(
+              aspectRatio: 1.2,
+              child: Stack(children: [
+                Positioned.fill(child: CustomPaint(painter: _FolderPainter(color))),
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom: 14,
+                  child: Center(
+                    child: Text('$count',
+                        style: TextStyle(color: Colors.white.withValues(alpha: 0.9), fontWeight: FontWeight.w800, fontSize: 18)),
+                  ),
+                ),
+              ]),
+            ),
+          ),
         ),
       ),
-      actions: [
-        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancelar')),
-        FilledButton(
-          onPressed: () => Navigator.pop(context, _data),
-          child: Text(widget.isNew ? 'Crear' : 'Guardar'),
+      _TileFooter(
+        title: (folder.data['name'] ?? '') as String,
+        subtitle: count == 1 ? '1 elemento' : '$count elementos',
+        items: const [
+          PopupMenuItem(value: 'edit', child: Text('Cambiar nombre y color')),
+          PopupMenuItem(value: 'move', child: Text('Mover a…')),
+          PopupMenuItem(value: 'delete', child: Text('Eliminar carpeta')),
+        ],
+        onMenu: onMenu,
+      ),
+    ]);
+  }
+}
+
+class _NotebookTile extends StatelessWidget {
+  final AppScope app;
+  final Rec nb;
+  final int pages;
+  final VoidCallback onTap;
+  final ValueChanged<String> onMenu;
+  const _NotebookTile({required this.app, required this.nb, required this.pages, required this.onTap, required this.onMenu});
+
+  @override
+  Widget build(BuildContext context) {
+    final date = _friendlyDate(((nb.data['opened'] ?? nb.updatedAt) as num).toInt());
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Expanded(
+        child: GestureDetector(onTap: onTap, child: NotebookCover(app: app, data: nb.data)),
+      ),
+      _TileFooter(
+        title: (nb.data['title'] ?? '') as String,
+        subtitle: '$date · ${pages == 1 ? '1 pág.' : '$pages págs.'}',
+        items: const [
+          PopupMenuItem(value: 'edit', child: Text('Personalizar portada')),
+          PopupMenuItem(value: 'move', child: Text('Mover a carpeta…')),
+          PopupMenuItem(value: 'export', child: Text('Exportar (PDF, JPG, PNG)')),
+          PopupMenuItem(value: 'delete', child: Text('Eliminar')),
+        ],
+        onMenu: onMenu,
+      ),
+    ]);
+  }
+}
+
+class _TileFooter extends StatelessWidget {
+  final String title;
+  final String subtitle;
+  final List<PopupMenuEntry<String>> items;
+  final ValueChanged<String> onMenu;
+  const _TileFooter({required this.title, required this.subtitle, required this.items, required this.onMenu});
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 44,
+      child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Expanded(
+          child: Padding(
+            padding: const EdgeInsets.only(top: 8, left: 2),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5, color: _kInk)),
+              Text(subtitle, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 11.5, color: _kSub)),
+            ]),
+          ),
         ),
-      ],
+        PopupMenuButton<String>(
+          padding: EdgeInsets.zero,
+          icon: const Icon(Icons.keyboard_arrow_down, color: _kSub),
+          onSelected: onMenu,
+          itemBuilder: (c) => items,
+        ),
+      ]),
     );
   }
 }

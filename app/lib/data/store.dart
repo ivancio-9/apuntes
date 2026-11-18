@@ -177,10 +177,55 @@ class Store extends ChangeNotifier {
 
   // ---------- Consultas ----------
 
-  List<Rec> notebooks() {
-    final l = (_byParent[''] ?? const <String, Rec>{}).values.where((r) => r.kind == 'notebook' && !r.deleted).toList();
+  List<Rec> notebooks([String? folder, bool all = false]) {
+    final l = (_byParent[''] ?? const <String, Rec>{})
+        .values
+        .where((r) => r.kind == 'notebook' && !r.deleted && (all || r.data['folder'] == folder))
+        .toList();
     l.sort((a, b) => ((b.data['opened'] ?? 0) as num).compareTo((a.data['opened'] ?? 0) as num));
     return l;
+  }
+
+  List<Rec> folders([String? parent, bool all = false]) {
+    final l = (_byParent[''] ?? const <String, Rec>{})
+        .values
+        .where((r) => r.kind == 'folder' && !r.deleted && (all || r.data['folder'] == parent))
+        .toList();
+    l.sort((a, b) => ((a.data['name'] ?? '') as String).toLowerCase().compareTo(((b.data['name'] ?? '') as String).toLowerCase()));
+    return l;
+  }
+
+  List<Rec> stickers() {
+    final l = (_byParent[''] ?? const <String, Rec>{}).values.where((r) => r.kind == 'sticker' && !r.deleted).toList();
+    l.sort((a, b) => ((b.data['created'] ?? 0) as num).compareTo((a.data['created'] ?? 0) as num));
+    return l;
+  }
+
+  /// Número de cuadernos y carpetas dentro de una carpeta.
+  int folderCount(String id) => notebooks(id).length + folders(id).length;
+
+  Future<Rec> createFolder(String name, {String? parent, int color = 0xFF5B8DEF}) async {
+    final t = nowMs();
+    final f = Rec(
+      id: newId(),
+      kind: 'folder',
+      parent: '',
+      data: {'name': name, 'color': color, 'folder': parent, 'created': t},
+      updatedAt: t,
+    );
+    await put(f);
+    return f;
+  }
+
+  /// Elimina una carpeta; su contenido pasa a la carpeta superior.
+  Future<void> removeFolder(Rec folder) async {
+    final up = folder.data['folder'] as String?;
+    final changes = <Rec>[];
+    for (final r in [...notebooks(folder.id), ...folders(folder.id)]) {
+      changes.add(r.copyWith(data: {...r.data, 'folder': up}, updatedAt: stamp(r)));
+    }
+    changes.add(folder.copyWith(deleted: true, updatedAt: stamp(folder)));
+    await putAll(changes);
   }
 
   List<Rec> pages(String notebookId) {
@@ -197,17 +242,20 @@ class Store extends ChangeNotifier {
 
   // ---------- Acciones de alto nivel ----------
 
-  Future<Rec> createNotebook(String title, {String paper = 'lined', int color = 0xFF3F51B5}) async {
+  Future<Rec> createNotebook(String title,
+      {String paper = 'lined', int color = 0xFF3F51B5, Map<String, dynamic>? extra, bool firstPage = true}) async {
     final t = nowMs();
     final nb = Rec(
       id: newId(),
       kind: 'notebook',
       parent: '',
-      data: {'title': title, 'paper': paper, 'color': color, 'created': t, 'opened': t},
+      data: {'title': title, 'paper': paper, 'color': color, 'created': t, 'opened': t, ...?extra},
       updatedAt: t,
     );
-    final page = Rec(id: newId(), kind: 'page', parent: nb.id, data: {'order': 1.0}, updatedAt: t);
-    await putAll([nb, page]);
+    await putAll([
+      nb,
+      if (firstPage) Rec(id: newId(), kind: 'page', parent: nb.id, data: {'order': 1.0}, updatedAt: t),
+    ]);
     return nb;
   }
 
@@ -215,6 +263,65 @@ class Store extends ChangeNotifier {
       put(r.copyWith(data: {...r.data, ...changes}, updatedAt: stamp(r)));
 
   Future<void> remove(Rec r) => put(r.copyWith(deleted: true, updatedAt: stamp(r)));
+
+  /// Orden para colocar una página justo detrás de [after] (o al final).
+  double orderAfter(String notebookId, Rec? after) {
+    final ps = pages(notebookId);
+    if (ps.isEmpty) return 1.0;
+    if (after == null || ps.last.id == after.id) return (ps.last.data['order'] as num).toDouble() + 1;
+    final i = ps.indexWhere((p) => p.id == after.id);
+    if (i < 0) return (ps.last.data['order'] as num).toDouble() + 1;
+    final a = (ps[i].data['order'] as num).toDouble();
+    final b = (ps[i + 1].data['order'] as num).toDouble();
+    return (a + b) / 2;
+  }
+
+  /// Orden para colocar una página justo delante de [before].
+  double orderBefore(String notebookId, Rec before) {
+    final ps = pages(notebookId);
+    final i = ps.indexWhere((p) => p.id == before.id);
+    final b = (before.data['order'] as num).toDouble();
+    if (i <= 0) return b - 1;
+    final a = (ps[i - 1].data['order'] as num).toDouble();
+    return (a + b) / 2;
+  }
+
+  Future<Rec> addPageWith(String notebookId, Map<String, dynamic> data, {Rec? after}) async {
+    final p = Rec(
+      id: newId(),
+      kind: 'page',
+      parent: notebookId,
+      data: {...data, 'order': orderAfter(notebookId, after)},
+      updatedAt: nowMs(),
+    );
+    await put(p);
+    return p;
+  }
+
+  /// Copia una página con todo su contenido y la coloca detrás.
+  Future<Rec> duplicatePage(Rec page) async {
+    final t = nowMs();
+    final copy = Rec(
+      id: newId(),
+      kind: 'page',
+      parent: page.parent,
+      data: {...page.data, 'order': orderAfter(page.parent, page), 'bookmark': false},
+      updatedAt: t,
+    );
+    final list = <Rec>[copy];
+    for (final e in elements(page.id)) {
+      list.add(Rec(id: newId(), kind: 'el', parent: copy.id, data: Map<String, dynamic>.from(e.data), updatedAt: t));
+    }
+    await putAll(list);
+    return copy;
+  }
+
+  /// Mueve una página para que quede justo delante de [target].
+  Future<void> movePageBefore(Rec page, Rec target) async {
+    if (page.id == target.id) return;
+    final order = orderBefore(page.parent, target);
+    await updateData(page, {'order': order});
+  }
 
   Future<Rec> addPage(String notebookId, {Rec? after}) async {
     final ps = pages(notebookId);

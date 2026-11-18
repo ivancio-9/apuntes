@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 import 'app_scope.dart';
 import 'data/store.dart';
@@ -20,6 +21,37 @@ Future<void> main() async {
     sync.syncNow();
   }
   runApp(ApuntesApp(app: AppScope(store, sync, settings)));
+}
+
+ThemeData _theme() {
+  final base = ThemeData(
+    useMaterial3: true,
+    colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF2F6FED), brightness: Brightness.light)
+        .copyWith(primary: const Color(0xFF2F6FED), surface: Colors.white),
+    scaffoldBackgroundColor: const Color(0xFFF6F7F9),
+  );
+  TextTheme text;
+  try {
+    text = GoogleFonts.interTextTheme(base.textTheme);
+  } catch (_) {
+    text = base.textTheme;
+  }
+  return base.copyWith(
+    textTheme: text,
+    dialogTheme: const DialogThemeData(
+      backgroundColor: Colors.white,
+      surfaceTintColor: Colors.transparent,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(18))),
+    ),
+    popupMenuTheme: const PopupMenuThemeData(
+      color: Colors.white,
+      surfaceTintColor: Colors.transparent,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(12))),
+    ),
+    bottomSheetTheme: const BottomSheetThemeData(backgroundColor: Colors.white, surfaceTintColor: Colors.transparent),
+    appBarTheme: const AppBarTheme(surfaceTintColor: Colors.transparent, elevation: 0, scrolledUnderElevation: 0),
+    snackBarTheme: const SnackBarThemeData(behavior: SnackBarBehavior.floating),
+  );
 }
 
 class ApuntesApp extends StatefulWidget {
@@ -70,10 +102,7 @@ class _ApuntesAppState extends State<ApuntesApp> with WidgetsBindingObserver {
       title: 'Apuntes',
       navigatorKey: _navKey,
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        colorSchemeSeed: const Color(0xFF3F51B5),
-        useMaterial3: true,
-      ),
+      theme: _theme(),
       home: widget.app.sync.loggedIn ? LibraryScreen(app: widget.app) : LoginScreen(app: widget.app),
     );
   }

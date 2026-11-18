@@ -92,6 +92,53 @@
       var out = await new Promise(function (r) { c.toBlob(r, 'image/jpeg', quality); });
       return new Uint8Array(await out.arrayBuffer());
     };
+
+    // Elegir un archivo (por ejemplo un PDF). Devuelve sus bytes o null.
+    window.apuntesPickFile = function (accept) {
+      return new Promise(function (resolve) {
+        var input = document.createElement('input');
+        input.type = 'file';
+        input.accept = accept;
+        input.style.display = 'none';
+        document.body.appendChild(input);
+        var done = false;
+        input.addEventListener('change', async function () {
+          done = true;
+          var f = input.files && input.files[0];
+          input.remove();
+          if (!f) { resolve(null); return; }
+          window.apuntesLastFileName = f.name;
+          resolve(new Uint8Array(await f.arrayBuffer()));
+        });
+        input.addEventListener('cancel', function () { if (!done) { input.remove(); resolve(null); } });
+        input.click();
+      });
+    };
+
+    // Convertir cada página de un PDF en una imagen JPG (con pdf.js).
+    window.apuntesPdfToImages = async function (bytes, maxWidth, onProgress) {
+      var base = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/build/';
+      var pdfjs = await import(base + 'pdf.min.mjs');
+      pdfjs.GlobalWorkerOptions.workerSrc = base + 'pdf.worker.min.mjs';
+      var doc = await pdfjs.getDocument({ data: bytes.slice() }).promise;
+      var out = [];
+      for (var i = 1; i <= doc.numPages; i++) {
+        var page = await doc.getPage(i);
+        var vp1 = page.getViewport({ scale: 1 });
+        var vp = page.getViewport({ scale: maxWidth / vp1.width });
+        var canvas = document.createElement('canvas');
+        canvas.width = Math.round(vp.width);
+        canvas.height = Math.round(vp.height);
+        var ctx = canvas.getContext('2d');
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        await page.render({ canvasContext: ctx, viewport: vp }).promise;
+        var blob = await new Promise(function (r) { canvas.toBlob(r, 'image/jpeg', 0.88); });
+        out.push(new Uint8Array(await blob.arrayBuffer()));
+        if (onProgress) onProgress(i, doc.numPages);
+      }
+      return out;
+    };
   </script>
 </head>
 <body>

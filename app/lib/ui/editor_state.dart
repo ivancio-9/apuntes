@@ -43,6 +43,13 @@ class EditorSettings extends ChangeNotifier {
   Color highlighterBase = const Color(0xFFFFEB3B);
   Color shapeColor = const Color(0xFF1E56C8);
   Color textColor = const Color(0xFF111111);
+  Color tapeColor = const Color(0xFFF48FB1);
+  String tapePattern = 'stripes';
+  double tapeWidth = 40;
+
+  /// Regla y ventana de zoom (no se guardan).
+  bool ruler = false;
+  bool zoomWindow = false;
 
   Color get highlighterColor => highlighterBase.withValues(alpha: 0.38);
 
@@ -50,6 +57,7 @@ class EditorSettings extends ChangeNotifier {
   static const highlighterWidths = [14.0, 24.0, 36.0];
   static const shapeWidths = [2.0, 3.5, 6.0];
   static const eraserSizes = [8.0, 14.0, 26.0];
+  static const tapeWidths = [28.0, 40.0, 56.0];
 
   double penWidth = 2.5;
   bool penPressure = true; // estilográfica (true) o bolígrafo (false)
@@ -90,6 +98,8 @@ class EditorSettings extends ChangeNotifier {
         return shapeColor;
       case Tool.text:
         return textColor;
+      case Tool.tape:
+        return tapeColor;
       default:
         return penColor;
     }
@@ -106,6 +116,9 @@ class EditorSettings extends ChangeNotifier {
           break;
         case Tool.text:
           textColor = c;
+          break;
+        case Tool.tape:
+          tapeColor = c;
           break;
         default:
           penColor = c;
@@ -155,6 +168,9 @@ class EditorSettings extends ChangeNotifier {
         'hlColor': highlighterBase.toARGB32(),
         'shapeColor': shapeColor.toARGB32(),
         'textColor': textColor.toARGB32(),
+        'tapeColor': tapeColor.toARGB32(),
+        'tapePattern': tapePattern,
+        'tapeWidth': tapeWidth,
         'penWidth': penWidth,
         'penPressure': penPressure,
         'hlWidth': highlighterWidth,
@@ -185,6 +201,9 @@ class EditorSettings extends ChangeNotifier {
     highlighterBase = color(j['hlColor']) ?? highlighterBase;
     shapeColor = color(j['shapeColor']) ?? shapeColor;
     textColor = color(j['textColor']) ?? textColor;
+    tapeColor = color(j['tapeColor']) ?? tapeColor;
+    tapePattern = kTapePatterns.contains(j['tapePattern']) ? j['tapePattern'] as String : tapePattern;
+    tapeWidth = dbl(j['tapeWidth']) ?? tapeWidth;
     penWidth = dbl(j['penWidth']) ?? penWidth;
     penPressure = j['penPressure'] != false;
     highlighterWidth = dbl(j['hlWidth']) ?? highlighterWidth;

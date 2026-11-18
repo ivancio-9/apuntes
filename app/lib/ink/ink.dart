@@ -10,7 +10,7 @@ import '../data/store.dart';
 const double kPageW = 1000;
 const double kPageH = 1414;
 
-enum Tool { select, pen, highlighter, eraser, shape, text }
+enum Tool { select, pen, highlighter, eraser, shape, tape, text, laser }
 
 enum ShapeKind { line, arrow, rect, ellipse, triangle }
 
@@ -75,6 +75,8 @@ abstract class Item {
           return StrokeItem(r);
         case 'shape':
           return ShapeItem(r);
+        case 'tape':
+          return TapeItem(r);
         case 'image':
           return ImageItem(r);
         case 'text':
@@ -153,6 +155,34 @@ class ShapeItem extends Item {
   void paint(Canvas canvas, Map<String, ui.Image> images) => paintShape(canvas, kind, a, b, color, width, fill);
 }
 
+class TapeItem extends Item {
+  late final Offset a, b;
+  late final Color color;
+  late final double width;
+  late final String pattern;
+
+  TapeItem(super.rec) {
+    final d = rec.data;
+    a = Offset(_num(d['x1'], 0), _num(d['y1'], 0));
+    b = Offset(_num(d['x2'], 0), _num(d['y2'], 0));
+    color = Color((d['color'] as num).toInt());
+    width = _num(d['w'], 36);
+    pattern = (d['pattern'] ?? 'stripes') as String;
+  }
+
+  @override
+  Rect get bounds => Rect.fromPoints(a, b).inflate(width);
+
+  @override
+  bool hit(Offset p, double r) {
+    final rr = r + width / 2;
+    return distSqToSegment(p, a, b) <= rr * rr;
+  }
+
+  @override
+  void paint(Canvas canvas, Map<String, ui.Image> images) => paintTape(canvas, a, b, width, color, pattern);
+}
+
 class ImageItem extends Item {
   late final String blob;
   late final Rect rect;
@@ -223,6 +253,7 @@ Map<String, dynamic> transformData(Map<String, dynamic> d, Offset origin, double
       out['w'] = _num(d['w'], 3) * s;
       break;
     case 'shape':
+    case 'tape':
       final p1 = tp(_num(d['x1'], 0), _num(d['y1'], 0));
       final p2 = tp(_num(d['x2'], 0), _num(d['y2'], 0));
       out['x1'] = p1.dx;
@@ -438,40 +469,229 @@ void paintShape(Canvas canvas, ShapeKind k, Offset a, Offset b, Color color, dou
 }
 
 // ---------------------------------------------------------------------------
-// Papel
+// Washi tape
 
-void paintPaper(Canvas canvas, String paper) {
+const kTapePatterns = ['solid', 'stripes', 'dots', 'grid', 'zigzag'];
+
+void paintTape(Canvas canvas, Offset a, Offset b, double w, Color color, String pattern) {
+  final len = (b - a).distance;
+  if (len < 1) return;
+  final ang = math.atan2(b.dy - a.dy, b.dx - a.dx);
+  canvas.save();
+  canvas.translate(a.dx, a.dy);
+  canvas.rotate(ang);
+  final h = w / 2;
+  final n = math.max(4, (w / 5).round());
+  final path = Path()..moveTo(0, -h);
+  path.lineTo(len, -h);
+  for (var i = 1; i <= n; i++) {
+    path.lineTo(len + (i.isOdd ? -3.5 : 0), -h + w * i / n);
+  }
+  path.lineTo(0, h);
+  for (var i = 1; i <= n; i++) {
+    path.lineTo(i.isOdd ? 3.5 : 0, h - w * i / n);
+  }
+  path.close();
+  canvas.drawPath(path, Paint()..color = color.withValues(alpha: 0.78));
+  canvas.save();
+  canvas.clipPath(path);
+  final p = Paint()
+    ..color = const Color(0x73FFFFFF)
+    ..strokeWidth = 3;
+  switch (pattern) {
+    case 'stripes':
+      for (var x = -w; x < len + w; x += 14) {
+        canvas.drawLine(Offset(x, h), Offset(x + w, -h), p);
+      }
+      break;
+    case 'dots':
+      for (var x = 6.0; x < len; x += 13) {
+        for (var y = -h + 6; y < h; y += 12) {
+          canvas.drawCircle(Offset(x + ((y / 12).round().isOdd ? 6 : 0), y), 2.6, p);
+        }
+      }
+      break;
+    case 'grid':
+      p.strokeWidth = 1.6;
+      for (var x = 0.0; x < len; x += 10) {
+        canvas.drawLine(Offset(x, -h), Offset(x, h), p);
+      }
+      for (var y = -h; y < h; y += 10) {
+        canvas.drawLine(Offset(0, y), Offset(len, y), p);
+      }
+      break;
+    case 'zigzag':
+      p
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2.5;
+      final z = Path()..moveTo(0, 0);
+      for (var x = 0.0; x < len; x += 10) {
+        z.lineTo(x + 5, (x ~/ 10).isEven ? -h * 0.4 : h * 0.4);
+      }
+      canvas.drawPath(z, p);
+      break;
+  }
+  canvas.restore();
+  canvas.restore();
+}
+
+/// Pinta los elementos de una página en el orden correcto (imágenes, subrayados, resto).
+void paintPageItems(Canvas canvas, Iterable<Item> items, Map<String, ui.Image> images,
+    {bool Function(Item)? visible}) {
+  final list = items.where((it) => it is! TextItem && (visible == null || visible(it))).toList();
+  for (final it in list) {
+    if (it is ImageItem) it.paint(canvas, images);
+  }
+  for (final it in list) {
+    if (it is StrokeItem && it.stroke.tool == kToolHighlighter) it.paint(canvas, images);
+  }
+  for (final it in list) {
+    if (it is ImageItem || (it is StrokeItem && it.stroke.tool == kToolHighlighter)) continue;
+    it.paint(canvas, images);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Papel y plantillas
+
+const kTemplates = {
+  'blank': 'En blanco',
+  'lined': 'Rayado',
+  'narrow': 'Rayado estrecho',
+  'grid': 'Cuadrícula',
+  'dots': 'Puntos',
+  'cornell': 'Cornell',
+  'checklist': 'Lista de tareas',
+  'weekly': 'Agenda semanal',
+  'music': 'Pentagrama',
+};
+
+const kPaperColors = {
+  'white': 0xFFFFFFFF,
+  'cream': 0xFFFFF8E8,
+  'gray': 0xFFF1F2F4,
+  'dark': 0xFF2A2B2F,
+};
+
+const kPaperColorNames = {
+  'white': 'Blanco',
+  'cream': 'Crema',
+  'gray': 'Gris',
+  'dark': 'Oscuro',
+};
+
+void _label(Canvas canvas, String text, Offset at, Color color, double size, {FontWeight weight = FontWeight.w600}) {
+  final pb = ui.ParagraphBuilder(ui.ParagraphStyle(fontSize: size, fontWeight: weight))
+    ..pushStyle(ui.TextStyle(color: color, fontSize: size, fontWeight: weight))
+    ..addText(text);
+  final para = pb.build()..layout(const ui.ParagraphConstraints(width: 600));
+  canvas.drawParagraph(para, at);
+}
+
+/// Dibuja el papel: color, plantilla y (si hay) la imagen de fondo de un PDF importado.
+void paintPaper(Canvas canvas, String template, {String paperColor = 'white', ui.Image? background}) {
   const page = Rect.fromLTWH(0, 0, kPageW, kPageH);
-  canvas.drawRect(page.shift(const Offset(0, 6)), Paint()..color = const Color(0x22000000));
-  canvas.drawRect(page, Paint()..color = const Color(0xFFFFFFFF));
-  const gap = 40.0;
+  final dark = paperColor == 'dark';
+  canvas.drawRect(page.shift(const Offset(0, 4)), Paint()..color = const Color(0x1F000000));
+  canvas.drawRect(page, Paint()..color = Color(kPaperColors[paperColor] ?? 0xFFFFFFFF));
+  if (background != null) {
+    final iw = background.width.toDouble(), ih = background.height.toDouble();
+    final s = math.min(kPageW / iw, kPageH / ih);
+    final dst = Rect.fromCenter(center: page.center, width: iw * s, height: ih * s);
+    canvas.drawImageRect(background, Rect.fromLTWH(0, 0, iw, ih), dst, Paint()..filterQuality = FilterQuality.medium);
+  }
   final line = Paint()
-    ..color = const Color(0xFFB3CDE8)
+    ..color = dark ? const Color(0x33FFFFFF) : const Color(0xFFB9D0E8)
     ..strokeWidth = 1.2;
-  final grid = Paint()
-    ..color = const Color(0xFFDDDDDD)
+  final soft = Paint()
+    ..color = dark ? const Color(0x26FFFFFF) : const Color(0xFFDADDE2)
     ..strokeWidth = 1;
-  switch (paper) {
+  final strong = Paint()
+    ..color = dark ? const Color(0x55FFFFFF) : const Color(0xFF9AA3AE)
+    ..strokeWidth = 1.6;
+  final margin = Paint()
+    ..color = const Color(0x66E57373)
+    ..strokeWidth = 1.5;
+  final labelColor = dark ? const Color(0x99FFFFFF) : const Color(0xFF8A929C);
+  const gap = 40.0;
+
+  switch (template) {
     case 'lined':
       for (var y = 120.0; y < kPageH - 40; y += gap) {
         canvas.drawLine(Offset(0, y), Offset(kPageW, y), line);
       }
-      canvas.drawLine(const Offset(110, 0), const Offset(110, kPageH),
-          Paint()..color = const Color(0x66E57373)..strokeWidth = 1.5);
+      canvas.drawLine(const Offset(110, 0), const Offset(110, kPageH), margin);
+      break;
+    case 'narrow':
+      for (var y = 100.0; y < kPageH - 30; y += 30) {
+        canvas.drawLine(Offset(0, y), Offset(kPageW, y), line);
+      }
+      canvas.drawLine(const Offset(90, 0), const Offset(90, kPageH), margin);
       break;
     case 'grid':
       for (var y = gap; y < kPageH; y += gap) {
-        canvas.drawLine(Offset(0, y), Offset(kPageW, y), grid);
+        canvas.drawLine(Offset(0, y), Offset(kPageW, y), soft);
       }
       for (var x = gap; x < kPageW; x += gap) {
-        canvas.drawLine(Offset(x, 0), Offset(x, kPageH), grid);
+        canvas.drawLine(Offset(x, 0), Offset(x, kPageH), soft);
       }
       break;
     case 'dots':
-      final dot = Paint()..color = const Color(0xFFBBBBBB);
+      final dot = Paint()..color = dark ? const Color(0x44FFFFFF) : const Color(0xFFBBBBBB);
       for (var y = gap; y < kPageH; y += gap) {
         for (var x = gap; x < kPageW; x += gap) {
           canvas.drawCircle(Offset(x, y), 1.8, dot);
+        }
+      }
+      break;
+    case 'cornell':
+      const top = 150.0, cue = 290.0, bottom = kPageH - 270;
+      canvas.drawLine(const Offset(0, top), const Offset(kPageW, top), strong);
+      canvas.drawLine(const Offset(cue, top), const Offset(cue, bottom), strong);
+      canvas.drawLine(const Offset(0, bottom), const Offset(kPageW, bottom), strong);
+      for (var y = top + gap; y < bottom - 4; y += gap) {
+        canvas.drawLine(Offset(cue, y), Offset(kPageW, y), line);
+      }
+      _label(canvas, 'TEMA', const Offset(40, 40), labelColor, 18);
+      _label(canvas, 'IDEAS CLAVE', const Offset(40, top + 16), labelColor, 16);
+      _label(canvas, 'NOTAS', Offset(cue + 30, top + 16), labelColor, 16);
+      _label(canvas, 'RESUMEN', const Offset(40, bottom + 20), labelColor, 16);
+      break;
+    case 'checklist':
+      final box = Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2
+        ..color = dark ? const Color(0x66FFFFFF) : const Color(0xFFA7B0BB);
+      _label(canvas, 'TAREAS', const Offset(60, 50), labelColor, 22);
+      for (var y = 150.0; y < kPageH - 60; y += 60) {
+        canvas.drawLine(Offset(60, y), Offset(kPageW - 60, y), line);
+        canvas.drawRRect(
+            RRect.fromRectAndRadius(Rect.fromLTWH(64, y - 40, 26, 26), const Radius.circular(5)), box);
+      }
+      break;
+    case 'weekly':
+      const days = ['LUNES', 'MARTES', 'MIÉRCOLES', 'JUEVES', 'VIERNES', 'SÁBADO', 'DOMINGO', 'NOTAS'];
+      _label(canvas, 'SEMANA', const Offset(50, 40), labelColor, 24, weight: FontWeight.w700);
+      const top = 110.0, left = 40.0;
+      const cw = (kPageW - 2 * left) / 2, ch = (kPageH - top - 40) / 4;
+      for (var i = 0; i < 8; i++) {
+        final r = Rect.fromLTWH(left + (i % 2) * cw, top + (i ~/ 2) * ch, cw, ch);
+        canvas.drawRRect(
+            RRect.fromRectAndRadius(r.deflate(8), const Radius.circular(12)),
+            Paint()
+              ..style = PaintingStyle.stroke
+              ..strokeWidth = 1.6
+              ..color = strong.color);
+        _label(canvas, days[i], r.topLeft + const Offset(26, 22), labelColor, 15);
+        for (var y = r.top + 80; y < r.bottom - 20; y += 38) {
+          canvas.drawLine(Offset(r.left + 26, y), Offset(r.right - 26, y), soft);
+        }
+      }
+      break;
+    case 'music':
+      for (var y = 140.0; y < kPageH - 120; y += 120) {
+        for (var k = 0; k < 5; k++) {
+          canvas.drawLine(Offset(60, y + k * 14), Offset(kPageW - 60, y + k * 14), strong);
         }
       }
       break;

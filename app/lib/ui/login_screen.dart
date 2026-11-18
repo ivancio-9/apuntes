@@ -45,18 +45,46 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Center(
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [Color(0xFFE8F0FF), Color(0xFFF6F7F9), Color(0xFFFFF1E6)],
+          ),
+        ),
+        child: Center(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(24),
-          child: ConstrainedBox(
+          child: Container(
             constraints: const BoxConstraints(maxWidth: 420),
+            padding: const EdgeInsets.fromLTRB(28, 32, 28, 28),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(24),
+              boxShadow: const [BoxShadow(color: Color(0x1A1F2A44), blurRadius: 30, offset: Offset(0, 12))],
+            ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Icon(Icons.edit_note, size: 72, color: Theme.of(context).colorScheme.primary),
-                const SizedBox(height: 8),
-                Text('Apuntes', textAlign: TextAlign.center, style: Theme.of(context).textTheme.headlineMedium),
-                const SizedBox(height: 32),
+                Center(
+                  child: Container(
+                    width: 76,
+                    height: 76,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(20),
+                      gradient: const LinearGradient(colors: [Color(0xFF4F8BFF), Color(0xFF2F6FED)]),
+                    ),
+                    child: const Icon(Icons.edit_note, size: 48, color: Colors.white),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                const Text('Apuntes',
+                    textAlign: TextAlign.center, style: TextStyle(fontSize: 28, fontWeight: FontWeight.w800)),
+                const SizedBox(height: 4),
+                const Text('Tus cuadernos, en tu propio servidor',
+                    textAlign: TextAlign.center, style: TextStyle(color: Colors.black54)),
+                const SizedBox(height: 28),
                 if (!_fixedUrl) ...[
                   TextField(
                     controller: _url,
@@ -95,6 +123,7 @@ class _LoginScreenState extends State<LoginScreen> {
             ),
           ),
         ),
+      ),
       ),
     );
   }

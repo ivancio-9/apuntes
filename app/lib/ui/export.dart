@@ -11,10 +11,10 @@ import '../app_scope.dart';
 import '../data/store.dart';
 import '../ink/ink.dart';
 import '../platform/files_stub.dart' if (dart.library.js_interop) '../platform/files_web.dart';
-import 'page_editor.dart';
+import 'notebook_canvas.dart';
 
-/// Dibuja una página completa (papel, imágenes, tinta, figuras y textos) como PNG.
-Future<Uint8List> renderPagePng(AppScope app, Rec page, String paper, {double scale = 2}) async {
+/// Dibuja una página completa (papel, imágenes, tinta, figuras y textos).
+Future<ui.Image> renderPageImage(AppScope app, Rec notebook, Rec page, {double scale = 2}) async {
   final items = <Item>[];
   for (final r in app.store.elements(page.id)) {
     final it = Item.fromRec(r);
@@ -22,40 +22,41 @@ Future<Uint8List> renderPagePng(AppScope app, Rec page, String paper, {double sc
   }
 
   final images = <String, ui.Image>{};
-  for (final it in items.whereType<ImageItem>()) {
-    if (images.containsKey(it.blob)) continue;
-    var bytes = await app.store.getBlob(it.blob);
-    bytes ??= await app.sync.fetchBlob(it.blob);
-    if (bytes == null) continue;
+  Future<void> load(String blob) async {
+    if (images.containsKey(blob)) return;
+    var bytes = await app.store.getBlob(blob);
+    bytes ??= await app.sync.fetchBlob(blob);
+    if (bytes == null) return;
     try {
       final codec = await ui.instantiateImageCodec(bytes);
-      images[it.blob] = (await codec.getNextFrame()).image;
+      images[blob] = (await codec.getNextFrame()).image;
     } catch (_) {}
   }
 
-  final texts = items.whereType<TextItem>().toList();
-  for (final t in texts) {
-    textStyleFor(t.rec.data, 1); // pide la fuente
+  for (final it in items.whereType<ImageItem>()) {
+    await load(it.blob);
   }
-  try {
-    await GoogleFonts.pendingFonts();
-  } catch (_) {}
+  final bg = page.data['bg'] as String?;
+  if (bg != null) await load(bg);
 
+  final texts = items.whereType<TextItem>().toList();
+  if (texts.isNotEmpty) {
+    for (final t in texts) {
+      textStyleFor(t.rec.data, 1); // pide la fuente
+    }
+    try {
+      await GoogleFonts.pendingFonts();
+    } catch (_) {}
+  }
+
+  final template = (page.data['template'] ?? notebook.data['paper'] ?? 'lined') as String;
+  final paperColor = (notebook.data['paperColor'] ?? 'white') as String;
   final recorder = ui.PictureRecorder();
   final canvas = Canvas(recorder);
   canvas.scale(scale);
   canvas.drawRect(const Rect.fromLTWH(0, 0, kPageW, kPageH), Paint()..color = const Color(0xFFFFFFFF));
-  paintPaper(canvas, paper);
-  for (final it in items) {
-    if (it is ImageItem) it.paint(canvas, images);
-  }
-  for (final it in items) {
-    if (it is StrokeItem && it.stroke.tool == kToolHighlighter) it.paint(canvas, images);
-  }
-  for (final it in items) {
-    if (it is ImageItem || it is TextItem || (it is StrokeItem && it.stroke.tool == kToolHighlighter)) continue;
-    it.paint(canvas, images);
-  }
+  paintPaper(canvas, template, paperColor: paperColor, background: bg == null ? null : images[bg]);
+  paintPageItems(canvas, items, images);
   for (final t in texts) {
     final d = t.rec.data;
     final tp = TextPainter(
@@ -65,7 +66,11 @@ Future<Uint8List> renderPagePng(AppScope app, Rec page, String paper, {double sc
     tp.paint(canvas, Offset((d['x'] as num).toDouble(), (d['y'] as num).toDouble()));
   }
   final pic = recorder.endRecording();
-  final img = await pic.toImage((kPageW * scale).round(), (kPageH * scale).round());
+  return pic.toImage((kPageW * scale).round(), (kPageH * scale).round());
+}
+
+Future<Uint8List> renderPagePng(AppScope app, Rec notebook, Rec page, {double scale = 2}) async {
+  final img = await renderPageImage(app, notebook, page, scale: scale);
   final data = await img.toByteData(format: ui.ImageByteFormat.png);
   return data!.buffer.asUint8List();
 }
@@ -142,7 +147,6 @@ Future<void> showExportDialog(BuildContext context, AppScope app, Rec notebook, 
 
   final pages = scope == _Scope.page ? [currentPage!] : app.store.pages(notebook.id);
   final allPages = app.store.pages(notebook.id);
-  final paper = (notebook.data['paper'] ?? 'lined') as String;
   final title = _safeName((notebook.data['title'] ?? 'apuntes') as String);
   final progress = ValueNotifier<String>('Preparando…');
 
@@ -162,7 +166,7 @@ Future<void> showExportDialog(BuildContext context, AppScope app, Rec notebook, 
     final images = <Uint8List>[];
     for (var i = 0; i < pages.length; i++) {
       progress.value = 'Preparando página ${i + 1} de ${pages.length}…';
-      final png = await renderPagePng(app, pages[i], paper);
+      final png = await renderPagePng(app, notebook, pages[i]);
       images.add(format == _Format.png ? png : await pngToJpg(png, 0.9));
     }
     progress.value = 'Generando archivo…';
