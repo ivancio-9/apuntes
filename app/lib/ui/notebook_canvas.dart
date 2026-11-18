@@ -12,7 +12,6 @@ import 'package:google_fonts/google_fonts.dart';
 import '../app_scope.dart';
 import '../data/store.dart';
 import '../ink/ink.dart';
-import '../platform/ink_stub.dart' if (dart.library.js_interop) '../platform/ink_web.dart';
 import 'color_picker.dart';
 import 'editor_state.dart';
 
@@ -109,12 +108,6 @@ class NotebookCanvasState extends State<NotebookCanvas> with SingleTickerProvide
   static const double _rulerLen = 900, _rulerW = 100;
   bool _rulerInit = false;
   Offset? _snapA, _snapD;
-
-  // Capa rápida de tinta del navegador
-  bool _jsInk = false;
-  Offset _viewOrigin = Offset.zero;
-  final GlobalKey _mainKey = GlobalKey();
-  final GlobalKey _zoomKey = GlobalKey();
 
   // Láser
   final List<_LaserPt> _laser = [];
@@ -807,7 +800,6 @@ class NotebookCanvasState extends State<NotebookCanvas> with SingleTickerProvide
             _maybeSnapToRuler(local + Offset(0, pageTop(_aPage)),
                 tool == Tool.highlighter ? settings.highlighterWidth : settings.penWidth);
             _addPoint(e);
-            _jsBegin();
             break;
           case Tool.shape:
           case Tool.tape:
@@ -860,18 +852,7 @@ class NotebookCanvasState extends State<NotebookCanvas> with SingleTickerProvide
   void _endInteraction({required bool commit, Offset? upPos}) {
     switch (_mode) {
       case _Mode.ink:
-        if (commit) {
-          if (_jsInk) _adoptJsPoints();
-          _commitStroke();
-        }
-        if (_jsInk) {
-          if (commit) {
-            WidgetsBinding.instance.addPostFrameCallback((_) => inkClear());
-          } else {
-            inkCancel();
-          }
-        }
-        _jsInk = false;
+        if (commit) _commitStroke();
         _cur.clear();
         _snapA = null;
         _snapD = null;
@@ -1003,15 +984,6 @@ class NotebookCanvasState extends State<NotebookCanvas> with SingleTickerProvide
   }
 
   void _up(PointerUpEvent e) {
-    if (e.pointer == _ptr && _mode == _Mode.ink && !_jsInk) {
-      // El último punto (al levantar el lápiz) también cuenta.
-      final p = _snapLocal(_toLocal(e.localPosition));
-      final last = _cur.length >= 3 ? _cur[_cur.length - 1] : 0.5;
-      _cur
-        ..add(p.dx)
-        ..add(p.dy)
-        ..add(last);
-    }
     if (e.pointer == _ptr) {
       final wasZoom = _aView == _View.zoom && _mode == _Mode.ink;
       _endInteraction(commit: true, upPos: e.localPosition);
@@ -1070,45 +1042,6 @@ class NotebookCanvasState extends State<NotebookCanvas> with SingleTickerProvide
       });
     } else if (e is PointerScaleEvent) {
       setState(() => _zoomAt(e.localPosition, _scale * e.scale));
-    }
-  }
-
-  // ---------- Capa rápida de tinta ----------
-
-  void _jsBegin() {
-    _jsInk = false;
-    if (!inkOverlayAvailable || _snapA != null) return;
-    final key = _aView == _View.zoom ? _zoomKey : _mainKey;
-    final box = key.currentContext?.findRenderObject() as RenderBox?;
-    if (box == null || !box.hasSize) return;
-    _viewOrigin = box.localToGlobal(Offset.zero);
-    final viewRect = _viewOrigin & box.size;
-    Rect page;
-    if (_aView == _View.main) {
-      final top = pageTop(_aPage);
-      page = Rect.fromPoints(_toScreen(Offset(0, top)), _toScreen(Offset(kPageW, top + kPageH)));
-    } else {
-      page = Rect.fromPoints(-_zoomOrigin * _zs, (const Offset(kPageW, kPageH) - _zoomOrigin) * _zs);
-    }
-    final clip = page.shift(_viewOrigin).intersect(viewRect);
-    final c = _strokeColor;
-    final css = 'rgba(${(c.r * 255).round()},${(c.g * 255).round()},${(c.b * 255).round()},${c.a.toStringAsFixed(3)})';
-    _jsInk = inkBegin(css, _strokeWidth * _aScale, _strokeTool == kToolPen, _isHl && settings.highlighterStraight,
-        clip.left, clip.top, clip.right, clip.bottom);
-    if (_jsInk) _tick();
-  }
-
-  /// Usa los puntos recogidos por el navegador (más y más precisos) para guardar el trazo.
-  void _adoptJsPoints() {
-    final raw = inkPoints();
-    if (raw.length < 3) return;
-    _cur.clear();
-    for (var i = 0; i + 2 < raw.length; i += 3) {
-      final local = _toLocal(Offset(raw[i], raw[i + 1]) - _viewOrigin);
-      _cur
-        ..add(local.dx)
-        ..add(local.dy)
-        ..add(raw[i + 2]);
     }
   }
 
@@ -1253,7 +1186,7 @@ class NotebookCanvasState extends State<NotebookCanvas> with SingleTickerProvide
   /// Dibuja lo que está "en vivo" de la página [page] (en coordenadas de página).
   void _paintLiveOnPage(Canvas canvas, int page, double scale) {
     if (page != _aPage || _ptr == null) return;
-    if (_mode == _Mode.ink && _cur.length >= 3 && !_jsInk) {
+    if (_mode == _Mode.ink && _cur.length >= 3) {
       canvas.save();
       canvas.clipRect(const Rect.fromLTWH(0, 0, kPageW, kPageH));
       paintStroke(canvas, Stroke(_strokeTool, _strokeColor, _strokeWidth, _finalPoints()));
@@ -1624,7 +1557,6 @@ class NotebookCanvasState extends State<NotebookCanvas> with SingleTickerProvide
                 _zoomPanelSize = Size(c.maxWidth, c.maxHeight);
                 return ClipRect(
                   child: Listener(
-                    key: _zoomKey,
                     behavior: HitTestBehavior.opaque,
                     onPointerDown: _downZoom,
                     onPointerMove: _moveZoom,
@@ -1690,7 +1622,6 @@ class NotebookCanvasState extends State<NotebookCanvas> with SingleTickerProvide
             child: Stack(children: [
               Positioned.fill(
                 child: Listener(
-                  key: _mainKey,
                   behavior: HitTestBehavior.opaque,
                   onPointerDown: _downMain,
                   onPointerMove: _moveMain,
