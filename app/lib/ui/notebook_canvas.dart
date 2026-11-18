@@ -984,6 +984,15 @@ class NotebookCanvasState extends State<NotebookCanvas> with SingleTickerProvide
   }
 
   void _up(PointerUpEvent e) {
+    if (e.pointer == _ptr && _mode == _Mode.ink) {
+      // El último punto (al levantar el lápiz) también cuenta.
+      final p = _snapLocal(_toLocal(e.localPosition));
+      final last = _cur.length >= 3 ? _cur[_cur.length - 1] : 0.5;
+      _cur
+        ..add(p.dx)
+        ..add(p.dy)
+        ..add(last);
+    }
     if (e.pointer == _ptr) {
       final wasZoom = _aView == _View.zoom && _mode == _Mode.ink;
       _endInteraction(commit: true, upPos: e.localPosition);
